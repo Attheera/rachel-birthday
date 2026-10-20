@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffd6ec">
+<title>A Sweet Journey for P'Rachel 🎂</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #ffd6ec;
+    touch-action: none; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px;
+    font-family: "Fredoka", "Trebuchet MS", sans-serif; font-size: 22px; color: #ff5fa2;
+    background: linear-gradient(#bfe6ff, #ffd6ec);
+  }
+  #loading .dot { animation: bob 1s ease-in-out infinite; display: inline-block; }
+  @keyframes bob { 50% { transform: translateY(-8px); } }
+  /* invisible probe used to read the phone's safe-area insets (notches) */
+  #safe {
+    position: fixed; visibility: hidden; pointer-events: none;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+</style>
+<!-- Phaser 3 from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+</head>
+<body>
+<div id="game"></div>
+<div id="safe"></div>
+<div id="loading"><div class="dot">🎂</div><div>Baking the cotton candy…</div></div>
+
+<script>
+/* =====================================================================
+   A SWEET JOURNEY — a birthday side-scroller for P'Rachel
+   ---------------------------------------------------------------------
+   • Everything (art, music, sound) is generated in code — no asset files.
+   • Edit the CONFIG block below to change names, messages and verses.
+   • Scenes:  Boot → Title → Game (+ UI overlay, + Background below) → Birthday
+   ===================================================================== */
+
+/* =========================== CONFIG ================================ */
+const CONFIG = {
+  friendName:   "P'Rachel",
+  birthdayDate: "October 24",
+  fromName:     "N'Oil",          // shown as the signature on the final wishes
+
+  worldLength:  22000,           // path length in world px
+  walkSpeed:    190,             // px / second  → ≈ 2 min of walking + reading the cards ≈ 3 min
+
+  // Gifts along the path, in order. type: "note" or "verse".
+  messages: [
+    { type: "note",  title: "Welcome, P'Rachel! 🎀",
+      body: "You've given me so many cards and gifts — this time it's my turn! Walk all the way to the Cupcake Castle. Sweet surprises are hidden along the way. 🍬" },
+    { type: "verse", body: "You make known to me the path of life; you will fill me with joy in your presence, with eternal pleasures at your right hand.",
+      ref: "Psalm 16:11" },
+    { type: "note",  title: "My Sunday lunch buddy 🍜",
+      body: "Almost every Sunday we have lunch together, I really enjoy those time. Thank you for the talks, the fun and the weet treat!" },
+    { type: "verse", body: "I praise you because I am fearfully and wonderfully made; your works are wonderful, I know that full well.",
+      ref: "Psalm 139:14" },
+    { type: "note",  title: "The best cookies 🍪",
+      body: "You've baked so many cookies for me, and every batch tasted like love. Today I hope someone spoils YOU with something sweet!" },
+    { type: "verse", body: "The LORD bless you and keep you; the LORD make his face shine on you and be gracious to you; the LORD turn his face toward you and give you peace.",
+      ref: "Numbers 6:24–26" },
+    { type: "note",  title: "Your cards & gifts 💌",
+      body: "Every handwritten card and thoughtful gift you've given me reminds me how big your heart is. You always make me feel remembered. Thank you!" },
+    { type: "verse", body: "Therefore encourage one another and build each other up, just as in fact you are doing.",
+      ref: "1 Thessalonians 5:11" },
+    { type: "note",  title: "3+ years of friendship 🌷",
+      body: "Over three years of friendship! Thank you for walking with me through ordinary days and hard ones. I'm so grateful God brought us together." },
+    { type: "verse", body: "She is clothed with strength and dignity; she can laugh at the days to come.",
+      ref: "Proverbs 31:25" },
+    { type: "note",  title: "Birthday wishes 🌈",
+      body: "May this new year bring rest for your heart, joy in the small moments, and beautiful dreams coming true." },
+    { type: "verse", body: "The LORD your God is with you, the Mighty Warrior who saves. He will take great delight in you; in his love he will no longer rebuke you, but will rejoice over you with singing.",
+      ref: "Zephaniah 3:17" },
+    { type: "note",  title: "Almost there…",
+      body: "One more gift and then… someone is waiting for you at the Cupcake Castle! Keep walking! 🏰✨" },
+    { type: "verse", body: "I thank my God every time I remember you.",
+      ref: "Philippians 1:3" },
+  ],
+  verseTranslation: "NIV",
+  verseCredit: "Scripture quotations taken from The Holy Bible, New International Version® NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.™ Used by permission. All rights reserved worldwide.",
+
+  finaleVerse: { body: "The LORD has done it this very day; let us rejoice today and be glad.", ref: "Psalm 118:24" },
+
+  finalWishes:
+    "Thank you for every Sunday lunch, every batch of cookies, and every card and gift you've given me. " +
+    "I pray this new year overflows with God's goodness — deep peace, good health, big belly laughs and dreams coming true. " +
+    "Here's to many more years of friendship (and Sunday lunches)! You are loved more than you know. 💖",
+};
+
+/* ========================= CONSTANTS =============================== */
+const FONT = '"Fredoka", "Baloo 2", "Nunito", "Trebuchet MS", "Segoe UI", sans-serif';
+const DPR = Math.min(window.devicePixelRatio || 1, 2);   // render at device resolution (capped for speed)
+const DESIGN_H = 540;                                     // world units visible vertically (landscape)
+const GROUND_Y = 460;                                     // world y of the walking surface
+const START_X = 220;
+const ZONES = [
+  { name: "🍬 Cotton Candy Meadow", ground: "groundFrost",   fill: 0xffe6bf, sky: [0x8fd3ff, 0xffd6ec] },
+  { name: "☁️ Marshmallow Hills",   ground: "groundMallow",  fill: 0xf0c995, sky: [0xa7c4ff, 0xffe2f1] },
+  { name: "🍭 Lollipop Forest",     ground: "groundFrost",   fill: 0xffe6bf, sky: [0xc6b3ff, 0xffd0e6] },
+  { name: "🌈 Sprinkle Sky Bridge", ground: "groundRainbow", fill: 0xe9f2ff, sky: [0x9ad9ff, 0xfff0c9] },
+  { name: "🧁 Cupcake Castle",      ground: "groundCake",    fill: 0xffc1d6, sky: [0xffa9d2, 0xffdcae] },
+];
+const PASTELS = [0xffb3d9, 0xb3e0ff, 0xd9c2ff, 0xbff2d9, 0xfff0a6, 0xffc9a8];
+const SPARKLE_TINTS = [0xffffff, 0xfff3a8, 0xffc2e2, 0xc9ecff];
+
+/* Shared, scene-independent state */
+const STATE = {
+  progress: 0, camX: 0, zoom: 1, groundScreenY: 0,
+  stars: 0, totalStars: 0, gifts: 0, moved: false,
+  input: { left: false, right: false },
+  safe: { l: 0, r: 0, t: 0, b: 0 },
+};
+
+/* ========================= SMALL HELPERS =========================== */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+function lerpColor(c1, c2, t) {
+  const r = lerp((c1 >> 16) & 255, (c2 >> 16) & 255, t);
+  const g = lerp((c1 >> 8) & 255, (c2 >> 8) & 255, t);
+  const b = lerp(c1 & 255, c2 & 255, t);
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+}
+function progressAt(x) { return clamp((x - START_X) / (CONFIG.worldLength - START_X), 0, 1); }
+function zoneAt(x) { return Math.min(4, Math.floor(progressAt(x) * 5)); }
+function zoneStartX(k) { return START_X + (CONFIG.worldLength - START_X) * k / 5; }
+/* UI scale unit: ≈ 1 CSS px on a phone, a bit bigger on large screens, in device px */
+function calcU(W, H) { return DPR * clamp((Math.min(W, H) / DPR) / 400, 0.85, 1.5); }
+function readSafeArea() {
+  const el = document.getElementById('safe');
+  if (!el) return;
+  const cs = getComputedStyle(el);
+  STATE.safe = {
+    t: (parseFloat(cs.paddingTop) || 0) * DPR, r: (parseFloat(cs.paddingRight) || 0) * DPR,
+    b: (parseFloat(cs.paddingBottom) || 0) * DPR, l: (parseFloat(cs.paddingLeft) || 0) * DPR,
+  };
+}
+/* Register a debounced resize handler that is removed when the scene shuts down */
+function onResize(scene, fn) {
+  let timer = null;
+  const handler = () => { clearTimeout(timer); timer = setTimeout(() => { if (scene.sys.isActive() || scene.sys.isSleeping()) fn(); }, 80); };
+  scene.scale.on('resize', handler);
+  scene.events.once('shutdown', () => { clearTimeout(timer); scene.scale.off('resize', handler); });
+}
+/* seeded random so the world looks the same every time */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* =====================================================================
+   AUDIO — tiny Web Audio chiptune engine (no files needed)
+   ===================================================================== */
+const NOTE_IDX = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
+function nf(name) {
+  const m = /^([A-G]#?)(\d)$/.exec(name);
+  const midi = (parseInt(m[2], 10) + 1) * 12 + NOTE_IDX[m[1]];
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+// "Happy Birthday to You" (public-domain melody), 3/4 time, starts with a 1-beat pickup
+const HB_MELODY = [
+  ['G4', .75], ['G4', .25], ['A4', 1], ['G4', 1], ['C5', 1], ['B4', 2],
+  ['G4', .75], ['G4', .25], ['A4', 1], ['G4', 1], ['D5', 1], ['C5', 2],
+  ['G4', .75], ['G4', .25], ['G5', 1], ['E5', 1], ['C5', 1], ['B4', 1], ['A4', 1],
+  ['F5', .75], ['F5', .25], ['E5', 1], ['C5', 1], ['D5', 1], ['C5', 3],
+];
+const HB_CHORDS = ['C', 'G', 'G', 'C', 'C', 'F', 'G', 'C'];
+// A short original "music box" interlude so the 5-minute loop doesn't get tiring
+const INTERLUDE = [
+  ['E5', .5], ['G5', .5], ['C6', 1], ['G5', 1],
+  ['A5', 1], ['E5', .5], ['C5', .5], ['E5', 1],
+  ['F5', .5], ['A5', .5], ['C6', 1], ['A5', 1],
+  ['G5', 1.5], ['F5', .5], ['E5', .5], ['D5', .5],
+  ['E5', .5], ['G5', .5], ['C6', 1], ['E6', 1],
+  ['C6', 1], ['A5', .5], ['E5', .5], ['A5', 1],
+  ['F5', .5], ['A5', .5], ['D6', 1], ['B5', 1],
+  ['C6', 2], [null, 1],
+];
+const IN_CHORDS = ['C', 'Am', 'F', 'G', 'C', 'Am', 'Dm', 'C'];
+const CHORDS = {
+  C: ['C3', ['E4', 'G4']], G: ['G2', ['B3', 'D4']], F: ['F2', ['A3', 'C4']],
+  Am: ['A2', ['C4', 'E4']], Dm: ['D3', ['F4', 'A4']],
+};
+function buildSong(bpm, inst) {
+  const ev = [];
+  let b = 0;
+  for (const [n, d] of HB_MELODY.concat(INTERLUDE)) { if (n) ev.push({ b, d, f: nf(n), v: 'lead' }); b += d; }
+  const chords = HB_CHORDS.concat(IN_CHORDS, ['G']);       // last measure: rest + pickup (turnaround)
+  chords.forEach((ch, k) => {
+    const sb = 1 + 3 * k;                                   // measure k starts after the 1-beat pickup
+    const [root, upper] = CHORDS[ch];
+    ev.push({ b: sb, d: 1, f: nf(root), v: 'bass' }, { b: sb, v: 'kick' });
+    for (const beat of [1, 2]) {
+      for (const n of upper) ev.push({ b: sb + beat, d: .5, f: nf(n), v: 'pah' });
+      ev.push({ b: sb + beat, v: 'hat' }, { b: sb + beat - .5, v: 'hat2' });
+    }
+  });
+  ev.sort((a, b) => a.b - b.b);
+  return { bpm, inst, events: ev, length: 3 + 3 * (chords.length - 1) }; // = 51 beats, loops seamlessly
+}
+
+class Chiptune {
+  constructor() { this.ctx = null; this.muted = false; this.song = null; this.timer = null; }
+
+  /* Must be called from a user gesture (tap/click/key) — browsers block audio before that */
+  unlock() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!this.ctx) {
+      const c = this.ctx = new AC();
+      this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : 0.7;
+      const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+      this.master.connect(comp); comp.connect(c.destination);
+      this.music = c.createGain(); this.music.gain.value = 0.55; this.music.connect(this.master);
+      this.sfxBus = c.createGain(); this.sfxBus.gain.value = 0.8; this.sfxBus.connect(this.master);
+      const len = Math.floor(c.sampleRate * 0.5);
+      this.noise = c.createBuffer(1, len, c.sampleRate);
+      const d = this.noise.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); // iOS unlock
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  setMuted(m) {
+    this.muted = m;
+    if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.7, this.ctx.currentTime, 0.05);
+  }
+  setMusicVolume(v) { if (this.ctx) this.music.gain.setTargetAtTime(v, this.ctx.currentTime, 0.25); }
+
+  tone(f, t, dur, o = {}) {
+    const c = this.ctx;
+    const { type = 'square', vol = 0.1, bus = this.music, attack = 0.006, decay = 0.6, release = 0.12, slide = 0, lp = 0 } = o;
+    const osc = c.createOscillator(); osc.type = type; osc.frequency.setValueAtTime(f, t);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f * slide), t + dur);
+    let node = osc;
+    if (lp) { const fl = c.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = lp; osc.connect(fl); node = fl; }
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + attack);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * decay), t + Math.max(attack + 0.01, dur));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + release);
+    node.connect(g); g.connect(bus);
+    osc.start(t); osc.stop(t + dur + release + 0.05);
+  }
+  noiseHit(t, dur, vol, freq = 7000, bus = this.music, type = 'highpass') {
+    const c = this.ctx;
+    const s = c.createBufferSource(); s.buffer = this.noise;
+    const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq;
+    const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(bus);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  kick(t, vol) {
+    const c = this.ctx;
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.14);
+    const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(this.music); o.start(t); o.stop(t + 0.25);
+  }
+
+  play(name) {
+    if (!this.ctx) return;
+    this.song = SONGS[name];
+    this.idx = 0;
+    this.loopStart = this.ctx.currentTime + 0.12;
+    if (!this.timer) this.timer = setInterval(() => this.tick(), 25);
+  }
+  tick() {
+    if (!this.song || !this.ctx || this.ctx.state !== 'running') return;
+    const song = this.song, spb = 60 / song.bpm, now = this.ctx.currentTime, ahead = now + 0.2;
+    for (let guard = 0; guard < 500; guard++) {
+      if (this.idx >= song.events.length) { this.idx = 0; this.loopStart += song.length * spb; }
+      const e = song.events[this.idx];
+      const t = this.loopStart + e.b * spb;
+      if (t > ahead) break;
+      if (t >= now - 0.05) { const fn = song.inst[e.v]; if (fn) fn(this, e.f, t, (e.d || 0) * spb); }
+      this.idx++;
+    }
+  }
+
+  sfx(name, n = 0) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + 0.01, b = this.sfxBus;
+    switch (name) {
+      case 'chime':
+        ['C6', 'E6', 'G6', 'C7'].forEach((k, i) => {
+          this.tone(nf(k), t + i * 0.07, 0.25, { type: 'sine', vol: 0.16, bus: b, decay: 0.3, release: 0.6 });
+          this.tone(nf(k) * 2, t + i * 0.07, 0.1, { type: 'triangle', vol: 0.03, bus: b, decay: 0.2, release: 0.3 });
+        });
+        break;
+      case 'blip': {
+        const f = nf('E6') * Math.pow(2, ((n % 6) * 2) / 12);
+        this.tone(f, t, 0.07, { type: 'square', vol: 0.035, bus: b, lp: 4000, slide: 1.5, decay: 0.5, release: 0.05 });
+        this.tone(f * 2, t + 0.03, 0.08, { type: 'sine', vol: 0.05, bus: b, release: 0.1 });
+        break;
+      }
+      case 'pop': this.tone(900, t, 0.08, { type: 'sine', vol: 0.14, bus: b, slide: 0.4, release: 0.04 }); break;
+      case 'zone':
+        ['G5', 'C6', 'E6', 'G6'].forEach((k, i) => this.tone(nf(k), t + i * 0.09, 0.2, { type: 'triangle', vol: 0.09, bus: b, decay: 0.4, release: 0.4 }));
+        break;
+      case 'whoosh': this.noiseHit(t, 0.7, 0.14, 900, b, 'bandpass'); break;
+      case 'firework':
+        this.tone(1500, t, 0.35, { type: 'triangle', vol: 0.05, bus: b, slide: 0.35, release: 0.05 });
+        this.noiseHit(t + 0.3, 0.45, 0.12, 2500, b);
+        break;
+      case 'fanfare':
+        ['C5', 'E5', 'G5', 'C6', 'E6', 'G6'].forEach((k, i) => {
+          this.tone(nf(k), t + i * 0.09, 0.16, { type: 'square', vol: 0.05, bus: b, lp: 3500, decay: 0.5 });
+          this.tone(nf(k), t + i * 0.09, 0.16, { type: 'triangle', vol: 0.08, bus: b, decay: 0.5 });
+        });
+        ['C5', 'E5', 'G5', 'C6'].forEach(k => this.tone(nf(k), t + 0.6, 0.9, { type: 'triangle', vol: 0.07, bus: b, decay: 0.4, release: 0.6 }));
+        break;
+    }
+  }
+}
+const SONGS = {
+  // gentle music-box version while walking
+  journey: buildSong(108, {
+    lead: (a, f, t, d) => { a.tone(f, t, d * 0.95, { type: 'triangle', vol: 0.22, decay: 0.35, release: 0.18 }); a.tone(f * 2, t, d * 0.6, { type: 'sine', vol: 0.05, decay: 0.2, release: 0.3 }); },
+    bass: (a, f, t, d) => a.tone(f, t, d * 0.8, { type: 'triangle', vol: 0.2, decay: 0.5 }),
+    pah:  (a, f, t, d) => a.tone(f, t, d * 0.8, { type: 'sine', vol: 0.04, decay: 0.3 }),
+    hat:  (a, f, t) => a.noiseHit(t, 0.04, 0.02),
+  }),
+  // bouncy party version for the finale
+  party: buildSong(126, {
+    lead: (a, f, t, d) => {
+      a.tone(f, t, d * 0.9, { type: 'square', vol: 0.075, lp: 3200, decay: 0.55 });
+      a.tone(f, t, d * 0.9, { type: 'triangle', vol: 0.12, decay: 0.55 });
+      a.tone(f * 2, t, d * 0.5, { type: 'sine', vol: 0.04, decay: 0.2, release: 0.25 });
+    },
+    bass: (a, f, t, d) => a.tone(f, t, d * 0.8, { type: 'triangle', vol: 0.26, decay: 0.6 }),
+    pah:  (a, f, t, d) => a.tone(f, t, d * 0.6, { type: 'square', vol: 0.025, lp: 1800, decay: 0.4 }),
+    kick: (a, f, t) => a.kick(t, 0.45),
+    hat:  (a, f, t) => a.noiseHit(t, 0.05, 0.045),
+    hat2: (a, f, t) => a.noiseHit(t, 0.03, 0.02),
+  }),
+};
+const audio = new Chiptune();
+['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, () => audio.unlock(), { passive: true }));
+document.addEventListener('visibilitychange', () => {
+  if (!audio.ctx) return;
+  if (document.hidden) audio.ctx.suspend(); else audio.ctx.resume();
+});
+
+/* =====================================================================
+   PROCEDURAL ART — every texture is drawn with the Canvas 2D API.
+   Textures are drawn at 2× and displayed at 0.5× so they stay crisp.
+   ===================================================================== */
+function rr(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function starPath(ctx, cx, cy, n, ro, ri, rot = -Math.PI / 2) {
+  ctx.beginPath();
+  for (let i = 0; i < n * 2; i++) {
+    const r = i % 2 ? ri : ro, a = rot + i * Math.PI / n;
+    const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+}
+function heartPath(ctx, cx, cy, s) {
+  ctx.beginPath(); ctx.moveTo(cx, cy + s * 0.5);
+  ctx.bezierCurveTo(cx + s * 0.95, cy - s * 0.05, cx + s * 0.5, cy - s * 0.8, cx, cy - s * 0.3);
+  ctx.bezierCurveTo(cx - s * 0.5, cy - s * 0.8, cx - s * 0.95, cy - s * 0.05, cx, cy + s * 0.5);
+  ctx.closePath();
+}
+function ellipse(ctx, x, y, rx, ry, rot = 0) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); }
+function circle(ctx, x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); }
+function vgrad(ctx, y0, y1, c0, c1) { const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, c0); g.addColorStop(1, c1); return g; }
+function sprinkles(ctx, rnd, n, x0, x1, y0, y1, colors) {
+  for (let i = 0; i < n; i++) {
+    ctx.save();
+    ctx.translate(x0 + rnd() * (x1 - x0), y0 + rnd() * (y1 - y0));
+    ctx.rotate(rnd() * Math.PI);
+    ctx.fillStyle = colors[i % colors.length];
+    rr(ctx, -5, -2, 10, 4, 2); ctx.fill();
+    ctx.restore();
+  }
+}
+const SPR_COLORS = ['#ff6fa8', '#7cc8ff', '#ffd84d', '#8fe0b0', '#b48cff', '#ffffff'];
+
+/* --- the hero: "Mochi", an original pastel kitten in a party hat --- */
+function drawKitten(ctx, frame, joy) {
+  const OL = '#c46a98', FUR = '#ffe8f2', FUR2 = '#ffd5e8', INNER = '#ffadd0';
+  ctx.translate(0, 24); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // tail
+  ctx.beginPath(); ctx.moveTo(106, 140); ctx.quadraticCurveTo(152, 140, 146, 98);
+  ctx.strokeStyle = OL; ctx.lineWidth = 15; ctx.stroke();
+  ctx.strokeStyle = FUR2; ctx.lineWidth = 8; ctx.stroke();
+  // feet (two walk frames)
+  const feet = frame === 0 ? [[62, 166], [98, 166]] : [[56, 166], [104, 159]];
+  for (const [x, y] of feet) { ellipse(ctx, x, y, 15, 10); ctx.fillStyle = FUR; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 4; ctx.stroke(); }
+  // body
+  ellipse(ctx, 80, 136, 38, 32); ctx.fillStyle = FUR2; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke();
+  ellipse(ctx, 80, 143, 22, 18); ctx.fillStyle = '#fff7fb'; ctx.fill();
+  // arms
+  const arms = frame === 0 ? [[46, 132, 0.4], [114, 132, -0.4]] : [[48, 126, 0.8], [113, 138, -0.1]];
+  for (const [x, y, r] of arms) { ellipse(ctx, x, y, 9, 13, r); ctx.fillStyle = FUR; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 4; ctx.stroke(); }
+  // ears
+  const ear = (pts, inner) => {
+    ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.lineTo(...pts[2]); ctx.closePath();
+    ctx.fillStyle = FUR; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(...inner[0]); ctx.lineTo(...inner[1]); ctx.lineTo(...inner[2]); ctx.closePath();
+    ctx.fillStyle = INNER; ctx.fill();
+  };
+  ear([[30, 64], [26, 16], [70, 38]], [[38, 56], [35, 28], [60, 42]]);
+  ear([[130, 64], [134, 16], [90, 38]], [[122, 56], [125, 28], [100, 42]]);
+  // head
+  ellipse(ctx, 80, 74, 56, 46); ctx.fillStyle = FUR; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke();
+  // party hat
+  ctx.save(); ctx.translate(84, 36); ctx.rotate(0.16);
+  ctx.beginPath(); ctx.moveTo(-20, 6); ctx.lineTo(20, 6); ctx.lineTo(0, -42); ctx.closePath();
+  ctx.fillStyle = '#9fe0ff'; ctx.fill();
+  ctx.save(); ctx.clip(); ctx.strokeStyle = '#ff9fcb'; ctx.lineWidth = 7;
+  for (let i = -60; i < 60; i += 16) { ctx.beginPath(); ctx.moveTo(i, 10); ctx.lineTo(i + 40, -50); ctx.stroke(); }
+  ctx.restore();
+  ctx.beginPath(); ctx.moveTo(-20, 6); ctx.lineTo(20, 6); ctx.lineTo(0, -42); ctx.closePath();
+  ctx.strokeStyle = OL; ctx.lineWidth = 4; ctx.stroke();
+  starPath(ctx, 0, -44, 5, 10, 5); ctx.fillStyle = '#ffe066'; ctx.fill(); ctx.strokeStyle = '#e0a800'; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.restore();
+  // face
+  if (!joy) {
+    for (const x of [60, 100]) {
+      ellipse(ctx, x, 80, 7, 9.5); ctx.fillStyle = '#3a2638'; ctx.fill();
+      circle(ctx, x - 2.5, 76, 3); ctx.fillStyle = '#fff'; ctx.fill();
+      circle(ctx, x + 2, 84, 1.4); ctx.fill();
+    }
+  } else {
+    ctx.strokeStyle = '#3a2638'; ctx.lineWidth = 4;
+    for (const x of [60, 100]) { ctx.beginPath(); ctx.arc(x, 86, 8, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+  }
+  ctx.fillStyle = 'rgba(255,120,170,.45)';
+  ellipse(ctx, 44, 94, 10, 6.5); ctx.fill(); ellipse(ctx, 116, 94, 10, 6.5); ctx.fill();
+  ellipse(ctx, 80, 90, 3.6, 2.6); ctx.fillStyle = '#ff86b4'; ctx.fill();
+  ctx.strokeStyle = OL; ctx.lineWidth = 3;
+  if (!joy) {
+    ctx.beginPath(); ctx.moveTo(72, 94); ctx.quadraticCurveTo(76, 100, 80, 94); ctx.quadraticCurveTo(84, 100, 88, 94); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(71, 95); ctx.quadraticCurveTo(80, 110, 89, 95); ctx.closePath();
+    ctx.fillStyle = '#ff7aa8'; ctx.fill(); ctx.stroke();
+  }
+}
+
+function drawGift(ctx, c1, c2, ribbon, ribbonDark) {
+  ctx.lineJoin = 'round';
+  rr(ctx, 18, 54, 84, 62, 10); ctx.fillStyle = vgrad(ctx, 54, 116, c1, c2); ctx.fill();
+  ctx.strokeStyle = ribbonDark; ctx.lineWidth = 4; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.7)';
+  [[30, 70], [40, 96], [80, 74], [90, 100], [30, 106], [86, 88]].forEach(([x, y]) => { circle(ctx, x, y, 3.5); ctx.fill(); });
+  ctx.fillStyle = ribbon; ctx.fillRect(52, 56, 16, 58);
+  rr(ctx, 10, 40, 100, 22, 9); ctx.fillStyle = c1; ctx.fill(); ctx.strokeStyle = ribbonDark; ctx.lineWidth = 4; ctx.stroke();
+  ctx.fillStyle = ribbon; ctx.fillRect(52, 42, 16, 18);
+  rr(ctx, 16, 44, 30, 5, 2); ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fill();
+  for (const s of [-1, 1]) {
+    ellipse(ctx, 60 + s * 18, 30, 18, 11, s * -0.5); ctx.fillStyle = ribbon; ctx.fill();
+    ctx.strokeStyle = ribbonDark; ctx.lineWidth = 3; ctx.stroke();
+  }
+  circle(ctx, 60, 38, 8); ctx.fillStyle = ribbon; ctx.fill(); ctx.stroke();
+}
+
+function drawLollipop(ctx, cx, cy, r, base, swirl, outline) {
+  circle(ctx, cx, cy, r); ctx.fillStyle = base; ctx.fill();
+  ctx.save(); circle(ctx, cx, cy, r); ctx.clip();
+  ctx.strokeStyle = swirl; ctx.lineWidth = r * 0.2; ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let t = 0; t < Math.PI * 6; t += 0.08) {
+    const rad = t / (Math.PI * 6) * r * 1.05;
+    const x = cx + Math.cos(t) * rad, y = cy + Math.sin(t) * rad;
+    t ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke(); ctx.restore();
+  circle(ctx, cx, cy, r); ctx.strokeStyle = outline; ctx.lineWidth = Math.max(3, r * 0.07); ctx.stroke();
+  ellipse(ctx, cx - r * 0.38, cy - r * 0.42, r * 0.26, r * 0.13, -0.6); ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fill();
+}
+function drawStick(ctx, x, y, w, h, stripe) {
+  rr(ctx, x, y, w, h, w / 2); ctx.fillStyle = '#fffaf4'; ctx.fill();
+  ctx.save(); rr(ctx, x, y, w, h, w / 2); ctx.clip();
+  ctx.strokeStyle = stripe; ctx.lineWidth = w * 0.45;
+  for (let i = y - w * 2; i < y + h + w * 2; i += w * 1.6) { ctx.beginPath(); ctx.moveTo(x - 4, i + w); ctx.lineTo(x + w + 4, i); ctx.stroke(); }
+  ctx.restore();
+  rr(ctx, x, y, w, h, w / 2); ctx.strokeStyle = 'rgba(200,120,160,.6)'; ctx.lineWidth = 2; ctx.stroke();
+}
+function drawPuff(ctx, puffs, shadeFrom) {
+  for (const [x, y, r] of puffs) { circle(ctx, x, y, r); ctx.fillStyle = '#ffffff'; ctx.fill(); }
+  ctx.save();
+  ctx.beginPath(); for (const [x, y, r] of puffs) { ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2); }
+  ctx.clip();
+  ctx.fillStyle = vgrad(ctx, shadeFrom, shadeFrom + 120, 'rgba(0,0,0,0)', 'rgba(60,40,90,.14)');
+  ctx.fillRect(0, 0, 1000, 1000);
+  ctx.restore();
+}
+
+/* Ground strips are 512×240 and tile seamlessly; the walking surface sits ~y=24 */
+function cakeLayers(ctx, w, h, colors, rnd) {
+  ctx.fillStyle = colors[0]; ctx.fillRect(0, 40, w, h - 40);
+  ctx.fillStyle = colors[1]; ctx.fillRect(0, 122, w, 16);
+  ctx.fillStyle = colors[2]; ctx.fillRect(0, 138, w, h - 138);
+  ctx.fillStyle = 'rgba(180,110,60,.10)';
+  for (let i = 0; i < 40; i++) { circle(ctx, 8 + rnd() * (w - 16), 80 + rnd() * 150, 2 + rnd() * 3); ctx.fill(); }
+}
+function frostingTop(ctx, w, color, gloss, rnd, drips = true) {
+  const top = x => 22 + 6 * Math.sin(x / w * Math.PI * 2 * 4);
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, top(0));
+  for (let x = 0; x <= w; x += 4) ctx.lineTo(x, top(x));
+  ctx.lineTo(w, 62); ctx.lineTo(0, 62); ctx.closePath(); ctx.fill();
+  if (drips) for (let i = 0; i < 8; i++) {
+    const x = 32 + i * 64 + (i % 2 ? 10 : -6), len = 12 + ((i * 37) % 23);
+    rr(ctx, x - 9, 50, 18, len + 12, 9); ctx.fill();
+  }
+  ctx.strokeStyle = gloss; ctx.lineWidth = 5; ctx.beginPath();
+  for (let x = 0; x <= w; x += 4) x ? ctx.lineTo(x, top(x) + 8) : ctx.moveTo(x, top(x) + 8);
+  ctx.stroke();
+}
+
+function generateTextures(scene) {
+  const make = (key, w, h, fn) => {
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    const tex = scene.textures.createCanvas(key, w, h);
+    const ctx = tex.getContext();
+    ctx.save(); fn(ctx, w, h); ctx.restore();
+    tex.refresh();
+  };
+  ART.forEach(([key, w, h, fn]) => make(key, w, h, fn));
+}
+
+/* All textures in one table: [key, width, height, draw(ctx, w, h)] */
+const ART = [
+  ['kit0', 160, 204, ctx => drawKitten(ctx, 0, false)],
+  ['kit1', 160, 204, ctx => drawKitten(ctx, 1, false)],
+  ['kitJoy', 160, 204, ctx => drawKitten(ctx, 0, true)],
+  ['kitJoy1', 160, 204, ctx => drawKitten(ctx, 1, true)],
+  ['giftPink', 120, 124, ctx => drawGift(ctx, '#ffc8e1', '#ff92c2', '#8fd6ff', '#4fa9dd')],
+  ['giftLilac', 120, 124, ctx => drawGift(ctx, '#e6d6ff', '#bfa2ff', '#ffd966', '#d99e00')],
+  ['star', 64, 64, ctx => {
+    starPath(ctx, 32, 34, 5, 28, 13);
+    const g = ctx.createRadialGradient(28, 28, 2, 32, 34, 30); g.addColorStop(0, '#fffbd0'); g.addColorStop(1, '#ffcf3d');
+    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = '#f0a020'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
+    ellipse(ctx, 25, 26, 6, 3, -0.6); ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fill();
+  }],
+  ['sparkle', 48, 48, ctx => {
+    const g = ctx.createRadialGradient(24, 24, 0, 24, 24, 24); g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 48, 48);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(24, 0);
+    ctx.quadraticCurveTo(26, 22, 48, 24); ctx.quadraticCurveTo(26, 26, 24, 48);
+    ctx.quadraticCurveTo(22, 26, 0, 24); ctx.quadraticCurveTo(22, 22, 24, 0); ctx.fill();
+  }],
+  ['dot', 64, 64, ctx => {
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  }],
+  ['glow', 256, 256, ctx => {
+    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(0.4, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+  }],
+  ['heart', 64, 60, ctx => {
+    heartPath(ctx, 32, 30, 34); ctx.fillStyle = vgrad(ctx, 4, 56, '#ffb3d4', '#ff6fa8'); ctx.fill();
+    ctx.strokeStyle = '#e2558f'; ctx.lineWidth = 2.5; ctx.stroke();
+    ellipse(ctx, 22, 20, 6, 3.5, -0.6); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fill();
+  }],
+  ['cloud', 320, 160, ctx => drawPuff(ctx, [[90, 100, 50], [150, 80, 62], [215, 95, 52], [260, 115, 36], [55, 120, 32], [160, 120, 44]], 60)],
+  ['confetti', 12, 20, ctx => { rr(ctx, 0, 0, 12, 20, 3); ctx.fillStyle = '#fff'; ctx.fill(); }],
+
+  /* ---------- ground strips ---------- */
+  ['groundFrost', 512, 240, (ctx, w, h) => {
+    const rnd = mulberry32(7);
+    cakeLayers(ctx, w, h, ['#fff0d4', '#ffadc6', '#ffe6bf'], rnd);
+    frostingTop(ctx, w, '#ff9fcb', 'rgba(255,255,255,.6)', rnd);
+    sprinkles(ctx, rnd, 30, 8, w - 8, 30, 54, SPR_COLORS);
+  }],
+  ['groundMallow', 512, 240, (ctx, w, h) => {
+    const rnd = mulberry32(11);
+    cakeLayers(ctx, w, h, ['#f8dcb0', '#ffd0e3', '#f0c995'], rnd);
+    ctx.fillStyle = 'rgba(160,100,50,.25)';
+    for (let x = 16; x < w; x += 32) for (let y = 160; y < h; y += 30) { circle(ctx, x, y, 2.5); ctx.fill(); }
+    for (let i = 0; i < 8; i++) {
+      const x = i * 64;
+      rr(ctx, x + 3, 16, 58, 54, 18); ctx.fillStyle = i % 2 ? '#ffe0ee' : '#ffffff'; ctx.fill();
+      ctx.strokeStyle = '#f2b6cf'; ctx.lineWidth = 3; ctx.stroke();
+      ellipse(ctx, x + 32, 25, 20, 5); ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fill();
+    }
+  }],
+  ['groundRainbow', 512, 240, (ctx, w, h) => {
+    ctx.fillStyle = '#f4f9ff'; ctx.fillRect(0, 60, w, h - 60);
+    for (let x = 0; x <= w; x += 64) { circle(ctx, x, 84, 30); ctx.fillStyle = '#ffffff'; ctx.fill(); }
+    ctx.fillStyle = vgrad(ctx, 100, h, 'rgba(180,205,255,0)', 'rgba(180,205,255,.45)'); ctx.fillRect(0, 100, w, h - 100);
+    ['#ff9ecb', '#ffc29e', '#fff0a0', '#b6f0b0', '#a6d8ff', '#c9b3ff'].forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, 18 + i * 8, w, 8); });
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(0, 18, w, 3);
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    for (let x = 32; x < w; x += 64) { starPath(ctx, x, 42, 4, 6, 2); ctx.fill(); }
+  }],
+  ['groundCake', 512, 240, (ctx, w, h) => {
+    const rnd = mulberry32(23);
+    cakeLayers(ctx, w, h, ['#ffd5e4', '#ffffff', '#ffc1d6'], rnd);
+    frostingTop(ctx, w, '#a3e6e2', 'rgba(255,255,255,.65)', rnd);
+    ctx.fillStyle = '#ffffff';
+    for (let x = 16; x < w; x += 32) { circle(ctx, x, 26 + 6 * Math.sin(x / w * Math.PI * 8), 5); ctx.fill(); }
+    sprinkles(ctx, rnd, 20, 8, w - 8, 36, 54, SPR_COLORS);
+  }],
+
+  /* ---------- parallax hills (seamless 1024 wide) ---------- */
+  ['hillsFar', 1024, 320, (ctx, w, h) => {
+    const f = x => 165 - 38 * Math.sin(Math.PI * 2 * x / w * 2) - 22 * Math.sin(Math.PI * 2 * x / w * 5 + 1) - 12 * Math.sin(Math.PI * 2 * x / w * 9 + 2);
+    ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x <= w; x += 4) ctx.lineTo(x, f(x)); ctx.lineTo(w, h); ctx.closePath();
+    ctx.fillStyle = vgrad(ctx, 90, h, '#c3d4ff', '#eadcff'); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.22)';
+    for (let x = 20; x < w; x += 44) { circle(ctx, x, f(x) + 14, 16); ctx.fill(); }
+  }],
+  ['hillsMid', 1024, 360, (ctx, w, h) => {
+    const f = x => 240 - 30 * Math.sin(Math.PI * 2 * x / w * 3 + 0.5) - 18 * Math.sin(Math.PI * 2 * x / w * 7);
+    // little candy trees behind the ridge
+    [[120, 'p'], [300, 'b'], [520, 'p'], [760, 'b'], [930, 'p']].forEach(([x, c]) => {
+      drawStick(ctx, x - 5, f(x) - 110, 10, 120, c === 'p' ? '#ff9fcb' : '#8fd4ff');
+      drawLollipop(ctx, x, f(x) - 130, 32, c === 'p' ? '#ffa3cf' : '#9bd8ff', '#ffffff', c === 'p' ? '#e46aa5' : '#5fb2e6');
+    });
+    [210, 420, 640, 860].forEach((x, i) => {
+      ctx.fillStyle = '#f7e2c8'; ctx.fillRect(x - 4, f(x) - 70, 8, 80);
+      const col = ['#ffd0e6', '#d6e8ff', '#e6d6ff', '#d6f5ea'][i];
+      [[x, f(x) - 90, 30], [x - 22, f(x) - 74, 22], [x + 22, f(x) - 74, 22]].forEach(([px, py, r]) => { circle(ctx, px, py, r); ctx.fillStyle = col; ctx.fill(); });
+    });
+    ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x <= w; x += 4) ctx.lineTo(x, f(x)); ctx.lineTo(w, h); ctx.closePath();
+    ctx.fillStyle = vgrad(ctx, 180, h, '#ffbfe0', '#ffe3f1'); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 6; ctx.beginPath();
+    for (let x = 0; x <= w; x += 4) x ? ctx.lineTo(x, f(x) + 6) : ctx.moveTo(x, f(x) + 6);
+    ctx.stroke();
+  }],
+
+  /* ---------- decorations ---------- */
+  ['lolliPink', 160, 340, ctx => { drawStick(ctx, 74, 140, 12, 198, '#ff9fcb'); drawLollipop(ctx, 80, 80, 70, '#ff9fcd', '#ffffff', '#e2669f'); }],
+  ['lolliBlue', 160, 340, ctx => { drawStick(ctx, 74, 140, 12, 198, '#8fd4ff'); drawLollipop(ctx, 80, 80, 70, '#9fd8ff', '#ffffff', '#4fa9dd'); }],
+  ['candyCane', 120, 300, ctx => {
+    ctx.lineCap = 'round';
+    const path = () => { ctx.beginPath(); ctx.moveTo(72, 292); ctx.lineTo(72, 84); ctx.arc(46, 84, 26, 0, Math.PI, true); ctx.lineTo(20, 104); };
+    path(); ctx.strokeStyle = '#f0a3c6'; ctx.lineWidth = 32; ctx.stroke();
+    path(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 26; ctx.stroke();
+    ctx.setLineDash([14, 14]); ctx.lineCap = 'butt';
+    path(); ctx.strokeStyle = '#ff7eb6'; ctx.lineWidth = 26; ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(66, 280); ctx.lineTo(66, 100); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 5; ctx.stroke();
+  }],
+  ['cupcake', 180, 200, ctx => {
+    ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(36, 118); ctx.lineTo(144, 118); ctx.lineTo(130, 196); ctx.lineTo(50, 196); ctx.closePath();
+    ctx.fillStyle = '#a7dcff'; ctx.fill(); ctx.strokeStyle = '#5fb2e6'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.strokeStyle = 'rgba(80,160,220,.5)'; ctx.lineWidth = 3;
+    for (let i = 1; i < 7; i++) { const t = i / 7; ctx.beginPath(); ctx.moveTo(36 + 108 * t, 120); ctx.lineTo(50 + 80 * t, 194); ctx.stroke(); }
+    [[90, 112, 62, 24], [90, 90, 48, 22], [90, 70, 32, 18]].forEach(([x, y, rx, ry]) => {
+      ellipse(ctx, x, y, rx, ry); ctx.fillStyle = '#ffb3d6'; ctx.fill(); ctx.strokeStyle = '#e77fb0'; ctx.lineWidth = 4; ctx.stroke();
+      ellipse(ctx, x - rx * 0.3, y - ry * 0.35, rx * 0.35, ry * 0.25); ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fill();
+    });
+    sprinkles(ctx, mulberry32(3), 14, 44, 136, 80, 120, SPR_COLORS);
+    ctx.beginPath(); ctx.moveTo(90, 44); ctx.quadraticCurveTo(96, 28, 106, 24); ctx.strokeStyle = '#6aa84f'; ctx.lineWidth = 3; ctx.stroke();
+    circle(ctx, 90, 48, 13); ctx.fillStyle = '#ff5f8a'; ctx.fill(); ctx.strokeStyle = '#d13e6c'; ctx.lineWidth = 3; ctx.stroke();
+    circle(ctx, 85, 43, 4); ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fill();
+  }],
+  ['iceCream', 140, 250, ctx => {
+    ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(34, 118); ctx.lineTo(106, 118); ctx.lineTo(70, 246); ctx.closePath();
+    ctx.fillStyle = '#f4c27a'; ctx.fill();
+    ctx.save(); ctx.clip(); ctx.strokeStyle = '#d99c52'; ctx.lineWidth = 3;
+    for (let i = -140; i < 200; i += 18) { ctx.beginPath(); ctx.moveTo(i, 118); ctx.lineTo(i + 130, 250); ctx.stroke(); ctx.beginPath(); ctx.moveTo(i + 130, 118); ctx.lineTo(i, 250); ctx.stroke(); }
+    ctx.restore();
+    ctx.beginPath(); ctx.moveTo(34, 118); ctx.lineTo(106, 118); ctx.lineTo(70, 246); ctx.closePath(); ctx.strokeStyle = '#c4843c'; ctx.lineWidth = 3; ctx.stroke();
+    circle(ctx, 70, 106, 38); ctx.fillStyle = '#b8f0d8'; ctx.fill(); ctx.strokeStyle = '#6cc9a0'; ctx.lineWidth = 4; ctx.stroke();
+    circle(ctx, 70, 62, 32); ctx.fillStyle = '#ffb6d5'; ctx.fill(); ctx.strokeStyle = '#e77fb0'; ctx.stroke();
+    rr(ctx, 44, 112, 12, 26, 6); ctx.fillStyle = '#b8f0d8'; ctx.fill();
+    rr(ctx, 88, 112, 12, 20, 6); ctx.fill();
+    sprinkles(ctx, mulberry32(5), 10, 46, 94, 40, 80, SPR_COLORS);
+    circle(ctx, 70, 28, 10); ctx.fillStyle = '#ff5f8a'; ctx.fill();
+  }],
+  ['gumdrop', 120, 100, ctx => {   // drawn white so it can be tinted any pastel
+    ctx.beginPath(); ctx.moveTo(10, 96); ctx.quadraticCurveTo(14, 8, 60, 8); ctx.quadraticCurveTo(106, 8, 110, 96); ctx.closePath();
+    ctx.fillStyle = vgrad(ctx, 8, 96, '#ffffff', '#d9d9e6'); ctx.fill(); ctx.strokeStyle = 'rgba(120,90,130,.35)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    for (let i = 0; i < 18; i++) { const r = mulberry32(i + 40); circle(ctx, 24 + r() * 72, 22 + r() * 66, 2.5); ctx.fill(); }
+    ellipse(ctx, 40, 30, 12, 6, -0.6); ctx.fill();
+  }],
+  ['mallowStack', 120, 220, ctx => {
+    [[22, 152, '#ffffff'], [16, 88, '#ffd6e8'], [26, 24, '#ffffff']].forEach(([x, y, c]) => {
+      rr(ctx, x, y, 78, 64, 22); ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = '#f0b0cc'; ctx.lineWidth = 4; ctx.stroke();
+      ellipse(ctx, x + 39, y + 12, 28, 7); ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fill();
+      ctx.fillStyle = 'rgba(240,160,200,.25)'; rr(ctx, x + 4, y + 44, 70, 16, 8); ctx.fill();
+    });
+  }],
+  ['cottonTree', 200, 320, ctx => {  // white puff so it can be tinted
+    rr(ctx, 93, 160, 14, 158, 7); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.strokeStyle = 'rgba(120,90,130,.3)'; ctx.lineWidth = 3; ctx.stroke();
+    drawPuff(ctx, [[100, 112, 62], [56, 132, 44], [144, 132, 44], [100, 70, 46], [68, 88, 36], [132, 88, 36]], 60);
+  }],
+  ['cookie', 120, 120, ctx => {
+    circle(ctx, 60, 60, 54); ctx.fillStyle = vgrad(ctx, 6, 114, '#f2c987', '#d99a52'); ctx.fill();
+    ctx.strokeStyle = '#b8783a'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; ellipse(ctx, 44, 38, 18, 9, -0.5); ctx.fill();
+    ctx.fillStyle = '#5a3a2a';
+    [[40, 50], [74, 40], [62, 70], [34, 80], [84, 78], [56, 96], [90, 58]].forEach(([x, y], i) => { ellipse(ctx, x, y, 7, 5, i); ctx.fill(); });
+    ctx.strokeStyle = '#ff9fcb'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath();
+    ctx.moveTo(24, 58); ctx.quadraticCurveTo(40, 40, 52, 58); ctx.quadraticCurveTo(66, 76, 80, 56); ctx.quadraticCurveTo(90, 44, 100, 60); ctx.stroke();
+  }],
+  ['mallowPlat', 240, 100, ctx => {
+    rr(ctx, 10, 20, 220, 56, 28); ctx.fillStyle = vgrad(ctx, 20, 76, '#ffffff', '#ffd9eb'); ctx.fill();
+    ctx.strokeStyle = '#f3b3cf'; ctx.lineWidth = 4; ctx.stroke();
+    rr(ctx, 40, 28, 120, 8, 4); ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fill();
+    sprinkles(ctx, mulberry32(9), 10, 30, 210, 40, 64, SPR_COLORS);
+  }],
+  ['sign', 260, 200, ctx => {
+    drawStick(ctx, 122, 96, 16, 102, '#ff9fcb');
+    rr(ctx, 10, 12, 240, 98, 24); ctx.fillStyle = '#fffaf3'; ctx.fill(); ctx.strokeStyle = '#ff9cc9'; ctx.lineWidth = 8; ctx.stroke();
+    rr(ctx, 20, 22, 220, 78, 16); ctx.strokeStyle = 'rgba(255,180,215,.6)'; ctx.lineWidth = 3; ctx.setLineDash([8, 7]); ctx.stroke(); ctx.setLineDash([]);
+    heartPath(ctx, 26, 16, 18); ctx.fillStyle = '#ff7eb6'; ctx.fill();
+    heartPath(ctx, 234, 16, 18); ctx.fill();
+  }],
+  ['castle', 640, 720, ctx => {
+    ctx.lineJoin = 'round';
+    const tower = (x, w, top, roof, apex) => {
+      rr(ctx, x, top, w, 700 - top, 14); ctx.fillStyle = vgrad(ctx, top, 700, '#ffe8f3', '#ffcfe5'); ctx.fill();
+      ctx.strokeStyle = '#e88ab5'; ctx.lineWidth = 6; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 16, top + 8); ctx.lineTo(x + w + 16, top + 8); ctx.lineTo(x + w / 2, apex); ctx.closePath();
+      ctx.fillStyle = roof; ctx.fill(); ctx.stroke();
+      ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 10;
+      for (let i = -200; i < 300; i += 30) { ctx.beginPath(); ctx.moveTo(x + i, top + 10); ctx.lineTo(x + i + 120, apex - 10); ctx.stroke(); }
+      ctx.restore();
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 5; i++) { circle(ctx, x - 8 + i * (w + 16) / 4, top + 10, 9); ctx.fill(); }
+      // flag
+      ctx.strokeStyle = '#c47aa2'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x + w / 2, apex); ctx.lineTo(x + w / 2, apex - 36); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + w / 2, apex - 36); ctx.lineTo(x + w / 2 + 30, apex - 28); ctx.lineTo(x + w / 2, apex - 20); ctx.closePath();
+      ctx.fillStyle = '#ff7eb6'; ctx.fill();
+      // window
+      rr(ctx, x + w / 2 - 22, top + 70, 44, 60, 22); ctx.fillStyle = '#fff2a8'; ctx.fill(); ctx.strokeStyle = '#e8b04a'; ctx.lineWidth = 4; ctx.stroke();
+    };
+    tower(248, 144, 170, '#ff9fcb', 50);
+    tower(30, 140, 270, '#9fe3e0', 150);
+    tower(470, 140, 270, '#9fe3e0', 150);
+    rr(ctx, 120, 360, 400, 340, 24); ctx.fillStyle = vgrad(ctx, 360, 700, '#ffd8ea', '#ffbcdc'); ctx.fill();
+    ctx.strokeStyle = '#e57fae'; ctx.lineWidth = 6; ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.moveTo(120, 384);
+    for (let x = 120; x <= 520; x += 4) ctx.lineTo(x, 372 + 5 * Math.sin(x / 18));
+    ctx.lineTo(520, 360); ctx.lineTo(120, 360); ctx.closePath(); ctx.fill();
+    for (let i = 0; i < 9; i++) { const x = 140 + i * 46; rr(ctx, x, 370, 16, 22 + (i * 13) % 20, 8); ctx.fill(); }
+    sprinkles(ctx, mulberry32(31), 40, 140, 500, 420, 680, SPR_COLORS);
+    [[200, 470], [440, 470]].forEach(([x, y]) => {
+      heartPath(ctx, x, y, 44); ctx.fillStyle = '#fff2a8'; ctx.fill(); ctx.strokeStyle = '#e8b04a'; ctx.lineWidth = 4; ctx.stroke();
+    });
+    ctx.beginPath(); ctx.moveTo(266, 700); ctx.lineTo(266, 568); ctx.arc(320, 568, 54, Math.PI, 0); ctx.lineTo(374, 700); ctx.closePath();
+    ctx.fillStyle = vgrad(ctx, 514, 700, '#d7a4f2', '#b27ad8'); ctx.fill(); ctx.strokeStyle = '#8f55b8'; ctx.lineWidth = 6; ctx.stroke();
+    heartPath(ctx, 320, 600, 36); ctx.fillStyle = '#ffd6f0'; ctx.fill();
+    circle(ctx, 356, 640, 6); ctx.fillStyle = '#ffe066'; ctx.fill();
+  }],
+  ['cake', 440, 360, ctx => {
+    ctx.lineJoin = 'round';
+    ellipse(ctx, 220, 340, 210, 18); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.strokeStyle = '#e7c9d8'; ctx.lineWidth = 4; ctx.stroke();
+    const tier = (x, y, w, h, c1, c2, oc, seed) => {
+      rr(ctx, x, y, w, h, 20); ctx.fillStyle = vgrad(ctx, y, y + h, c1, c2); ctx.fill(); ctx.strokeStyle = oc; ctx.lineWidth = 5; ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.save(); rr(ctx, x, y, w, h, 20); ctx.clip();
+      ctx.beginPath(); ctx.moveTo(x, y);
+      for (let i = 0; i <= w; i += 4) ctx.lineTo(x + i, y + 18 + 5 * Math.sin(i / 14));
+      ctx.lineTo(x + w, y); ctx.closePath(); ctx.fill();
+      for (let i = 14; i < w - 10; i += 34) { rr(ctx, x + i, y + 10, 14, 18 + ((i * 7) % 17), 7); ctx.fill(); }
+      ctx.restore();
+      sprinkles(ctx, mulberry32(seed), Math.floor(w / 18), x + 14, x + w - 14, y + 40, y + h - 12, SPR_COLORS);
+    };
+    tier(40, 226, 360, 112, '#ffc4de', '#ff9fca', '#e5679f', 1);
+    tier(84, 138, 272, 96, '#e2d2ff', '#c4a8ff', '#9a7ad8', 2);
+    tier(134, 62, 172, 84, '#c8f5e8', '#9fe3d0', '#58b89a', 4);
+    ctx.fillStyle = '#fff';
+    for (let x = 60; x < 390; x += 26) { circle(ctx, x, 334, 6); ctx.fill(); }
+  }],
+  ['candle', 28, 90, ctx => {
+    rr(ctx, 4, 10, 20, 78, 6); ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.save(); rr(ctx, 4, 10, 20, 78, 6); ctx.clip(); ctx.strokeStyle = '#ff8fc0'; ctx.lineWidth = 6;
+    for (let y = 0; y < 110; y += 16) { ctx.beginPath(); ctx.moveTo(0, y + 12); ctx.lineTo(28, y); ctx.stroke(); }
+    ctx.restore();
+    rr(ctx, 4, 10, 20, 78, 6); ctx.strokeStyle = '#e88ab5'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(14, 10); ctx.lineTo(14, 2); ctx.strokeStyle = '#6b4a3a'; ctx.lineWidth = 3; ctx.stroke();
+  }],
+  ['flame', 40, 64, ctx => {
+    ctx.beginPath(); ctx.moveTo(20, 2);
+    ctx.bezierCurveTo(34, 24, 38, 40, 20, 62); ctx.bezierCurveTo(2, 40, 6, 24, 20, 2); ctx.closePath();
+    const g = ctx.createRadialGradient(20, 44, 2, 20, 40, 30);
+    g.addColorStop(0, '#fffbe0'); g.addColorStop(0.45, '#ffd34d'); g.addColorStop(1, '#ff8a3c');
+    ctx.fillStyle = g; ctx.fill();
+  }],
+  ['balloon', 100, 170, ctx => {
+    const g = ctx.createRadialGradient(36, 40, 4, 50, 58, 52); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#d8d8e4');
+    ellipse(ctx, 50, 58, 40, 50); ctx.fillStyle = g; ctx.fill();
+    ellipse(ctx, 34, 38, 10, 16, 0.5); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(44, 112); ctx.lineTo(56, 112); ctx.lineTo(50, 104); ctx.closePath(); ctx.fillStyle = '#d8d8e4'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(50, 112); ctx.quadraticCurveTo(38, 136, 52, 150); ctx.quadraticCurveTo(62, 160, 50, 170);
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2; ctx.stroke();
+  }],
+  ['btnArrow', 240, 240, ctx => {
+    circle(ctx, 120, 128, 106); ctx.fillStyle = 'rgba(200,80,140,.25)'; ctx.fill();
+    const g = ctx.createRadialGradient(100, 90, 10, 120, 120, 110);
+    g.addColorStop(0, 'rgba(255,255,255,.97)'); g.addColorStop(1, 'rgba(255,224,240,.93)');
+    circle(ctx, 120, 120, 106); ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = '#ff9cc9'; ctx.lineWidth = 8; ctx.stroke();
+    circle(ctx, 120, 120, 92); ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(138, 70); ctx.lineTo(86, 120); ctx.lineTo(138, 170);
+    ctx.strokeStyle = '#ff5fa2'; ctx.lineWidth = 26; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+  }],
+];
+
+/* =====================================================================
+   CARD BUILDER — the pop-up "message card" used in the game & finale
+   ===================================================================== */
+function makeCard(scene, o) {
+  const { W, H, u } = o;
+  const cw = Math.min(W * 0.88, 600 * u);
+  let f = 1, built = null;
+  const build = (f) => {
+    const c = scene.add.container(0, 0);
+    const pad = 26 * u * f, innerW = cw - pad * 2, els = [];
+    let y = pad;
+    const T = (str, size, color, extra = {}) => {
+      const t = scene.add.text(0, y, str, Object.assign({
+        fontFamily: FONT, fontSize: Math.round(size) + 'px', color, align: 'center',
+        wordWrap: { width: innerW, useAdvancedWrap: true },
+      }, extra)).setOrigin(0.5, 0);
+      els.push(t); return t;
+    };
+    let icon = null;
+    if (o.icon) { icon = T(o.icon, 40 * u * f, '#000', { padding: { top: 4 * u } }); y += icon.height + 2 * u * f; }
+    if (o.title) { const t = T(o.title, 25 * u * f, o.titleColor || '#ff4f9a', { fontStyle: '700' }); y += t.height + 6 * u * f; }
+    const div = T('♡  ✿  ♡', 14 * u * f, o.accentCss || '#ff9cc9'); y += div.height + 10 * u * f;
+    const body = T(o.body, 21 * u * f, '#5b3550', { lineSpacing: 6 * u * f, fontStyle: o.bodyStyle || '500' });
+    y += body.height + 14 * u * f;
+    if (o.ref) { const r = T(o.ref, 17 * u * f, '#b0709a', { fontStyle: '600' }); y += r.height + 12 * u * f; }
+    let footer = null;
+    if (o.footer) { footer = T(o.footer, 15 * u * f, '#d27fae', { fontStyle: '600' }); y += footer.height; }
+    y += pad * 0.9;
+    const ch = y;
+    els.forEach(e => { e.y -= ch / 2; });
+    const g = scene.add.graphics();
+    const r = 26 * u;
+    g.fillStyle(0xb0507f, 0.22); g.fillRoundedRect(-cw / 2 + 6 * u, -ch / 2 + 10 * u, cw, ch, r);
+    g.fillStyle(0xfffafd, 1); g.fillRoundedRect(-cw / 2, -ch / 2, cw, ch, r);
+    g.fillStyle(o.accent || 0xff9cc9, 0.18); g.fillRoundedRect(-cw / 2 + 8 * u, -ch / 2 + 8 * u, cw - 16 * u, 12 * u, 6 * u);
+    g.lineStyle(5 * u, o.accent || 0xff9cc9, 1); g.strokeRoundedRect(-cw / 2, -ch / 2, cw, ch, r);
+    g.lineStyle(2 * u, 0xffffff, 0.9); g.strokeRoundedRect(-cw / 2 + 7 * u, -ch / 2 + 7 * u, cw - 14 * u, ch - 14 * u, r * 0.75);
+    c.add(g); c.add(els);
+    const corners = [[-1, -1, '✨'], [1, -1, '✨'], [-1, 1, '🌸'], [1, 1, '🌸']].map(([sx, sy, e]) =>
+      scene.add.text(sx * (cw / 2 - 4 * u), sy * (ch / 2 - 4 * u), e, { fontSize: Math.round(26 * u) + 'px' }).setOrigin(0.5));
+    c.add(corners);
+    if (o.counter) c.add(scene.add.text(cw / 2 - 22 * u, -ch / 2 + 22 * u, o.counter, { fontFamily: FONT, fontSize: Math.round(14 * u) + 'px', color: '#d08ab0', fontStyle: '600' }).setOrigin(1, 0));
+    return { c, cw, ch, icon, footer, corners };
+  };
+  for (;;) {
+    built = build(f);
+    if (built.ch <= H * 0.9 || f <= 0.6) break;
+    built.c.destroy(); f -= 0.08;
+  }
+  return built;
+}
+
+/* Gentle white fade overlay used for every transition */
+function whiteFade(scene, from, to, dur, onDone) {
+  const r = scene.add.rectangle(0, 0, scene.scale.width, scene.scale.height, 0xfff4fa, from).setOrigin(0).setDepth(9999);
+  scene.tweens.add({ targets: r, alpha: to, duration: dur, ease: 'Sine.easeInOut', onComplete: () => { if (to === 0) r.destroy(); if (onDone) onDone(); } });
+  return r;
+}
+
+/* =====================================================================
+   SCENES
+   ===================================================================== */
+
+/* ---------- Boot: generate every texture, then go to the title ---------- */
+class BootScene extends Phaser.Scene {
+  constructor() { super('Boot'); }
+  create() {
+    readSafeArea();
+    generateTextures(this);
+    const l = document.getElementById('loading'); if (l) l.remove();
+    this.scene.launch('Background');
+    this.scene.start('Title');
+  }
+}
+
+/* ---------- Background: sky gradient, parallax hills, clouds, sparkles ---------- */
+class BackgroundScene extends Phaser.Scene {
+  constructor() { super('Background'); }
+  create() {
+    const W = this.scale.width, H = this.scale.height;
+    this.sky = this.add.graphics();
+    this.sun = this.add.image(W * 0.8, H * 0.18, 'glow').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.7);
+    this.clouds = [];
+    const rnd = mulberry32(99);
+    for (let i = 0; i < 8; i++) {
+      this.clouds.push({ img: this.add.image(0, 0, 'cloud').setAlpha(0.92), base: rnd() * 3000, yf: 0.06 + rnd() * 0.32, s: 0.5 + rnd() * 0.6, speed: 4 + rnd() * 8, par: 0.04 + rnd() * 0.05 });
+    }
+    this.farHills = this.add.tileSprite(0, 0, W, 320, 'hillsFar').setOrigin(0, 1);
+    this.midHills = this.add.tileSprite(0, 0, W, 360, 'hillsMid').setOrigin(0, 1);
+    this.zoneRect = new Phaser.Geom.Rectangle(0, 0, W, H);
+    this.sparkles = this.add.particles(0, 0, 'sparkle', {
+      emitZone: { type: 'random', source: this.zoneRect },
+      lifespan: { min: 2500, max: 5000 }, speedY: { min: -14, max: -4 }, speedX: { min: -6, max: 6 },
+      scale: { start: 0.45 * DPR, end: 0 }, alpha: { start: 0.95, end: 0 },
+      frequency: 160, blendMode: 'ADD', tint: SPARKLE_TINTS,
+    });
+    onResize(this, () => this.layout());
+    this.layout();
+  }
+  layout() {
+    const W = this.scale.width, H = this.scale.height;
+    this.zoneRect.setSize(W, H);
+        this.sun.setPosition(W * 0.8, H * 0.16);
+  }
+  fitLayer(ts, w, h, sc) {
+    w = Math.ceil(w); h = Math.ceil(h);
+    if (ts.width !== w || ts.height !== h) ts.setSize(w, h);
+    if (ts.tileScaleX !== sc) ts.setTileScale(sc);
+  }
+  update(time) {
+    const W = this.scale.width, H = this.scale.height, z = STATE.zoom, gy = STATE.groundScreenY;
+    // sky colour blends between zones
+    const f = STATE.progress * 4, i = Math.min(3, Math.floor(f)), t = clamp(f - i, 0, 1);
+    const top = lerpColor(ZONES[i].sky[0], ZONES[i + 1].sky[0], t);
+    const bot = lerpColor(ZONES[i].sky[1], ZONES[i + 1].sky[1], t);
+    this.sky.clear(); this.sky.fillGradientStyle(top, top, bot, bot, 1); this.sky.fillRect(0, 0, W, H);
+    this.sun.setScale(Math.max(W, H) / 256 * (0.55 + STATE.progress * 0.25));
+    // parallax hills
+    const fs = z * 0.62, ms = z * 0.55;
+    this.fitLayer(this.farHills, W, 320 * fs, fs); this.farHills.setPosition(0, gy + 10 * z);
+    this.farHills.tilePositionX = STATE.camX * 0.15 / fs;
+    this.fitLayer(this.midHills, W, 360 * ms, ms); this.midHills.setPosition(0, gy + 18 * z);
+    this.midHills.tilePositionX = STATE.camX * 0.4 / ms;
+    // drifting clouds
+    const span = W + 700 * z;
+    for (const c of this.clouds) {
+      let x = (c.base * z - STATE.camX * c.par * z - time * 0.001 * c.speed * z * 10) % span;
+      if (x < 0) x += span;
+      c.img.setPosition(x - 350 * z, H * c.yf + Math.sin(time / 3000 + c.base) * 6 * z).setScale(c.s * z * 0.7);
+    }
+  }
+}
+
+/* ---------- Title ---------- */
+class TitleScene extends Phaser.Scene {
+  constructor() { super('Title'); }
+  create() {
+    this.starting = false;
+    STATE.progress = 0;
+    const W = this.scale.width, H = this.scale.height, portrait = H > W;
+    const s = portrait ? Math.min(W / 520, H / 950) : Math.min(W / 900, H / 600);
+    const VH = portrait ? 950 : 600, oy = (H - VH * s) / 2, cx = W / 2;
+    const Y = v => oy + v * s;
+
+    this.kit = this.add.image(cx, Y(portrait ? 360 : 250), 'kitJoy').setOrigin(0.5, 1).setScale(1.1 * s);
+    this.tweens.add({ targets: this.kit, y: this.kit.y - 18 * s, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: this.kit, angle: { from: -5, to: 5 }, duration: 1040, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const shadow = this.add.ellipse(cx, Y(portrait ? 362 : 252), 120 * s, 18 * s, 0xc46a98, 0.18);
+    shadow.setDepth(-1);
+
+    const txt = (y, str, size, color, extra = {}) => this.add.text(cx, Y(y), str, Object.assign({
+      fontFamily: FONT, fontSize: Math.round(size * s) + 'px', color, align: 'center',
+      stroke: '#ffffff', strokeThickness: Math.round(size * s * 0.18),
+    }, extra)).setOrigin(0.5).setShadow(0, 4 * s, 'rgba(200,80,140,.35)', 6 * s, true, true);
+
+    txt(portrait ? 450 : 300, 'A Sweet Journey', portrait ? 46 : 44, '#ff5fa2', { fontStyle: '700' });
+    txt(portrait ? 520 : 362, 'for ' + CONFIG.friendName, portrait ? 58 : 56, '#b06ad8', { fontStyle: '700' });
+    txt(portrait ? 590 : 410, '🎂 ' + CONFIG.birthdayDate + ' 🎂', 26, '#ff8a5c', { fontStyle: '600' });
+    const tap = txt(portrait ? 700 : 482, '✨ Tap to begin ✨', 30, '#ff4f9a', { fontStyle: '700' });
+    this.tweens.add({ targets: tap, scale: 1.08, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    txt(portrait ? 790 : 535, portrait ? 'Sound on 🔊  ·  Turn your phone sideways for the best view 📱' : 'Sound on 🔊', 17, '#9a6a8c',
+      { fontStyle: '500', wordWrap: { width: W * 0.86 } });
+
+    if (CONFIG.verseCredit) this.add.text(cx, H - 6 * s - STATE.safe.b, CONFIG.verseCredit, {
+      fontFamily: FONT, fontSize: Math.max(9, Math.round(10 * s)) + 'px', color: '#9a6a8c', align: 'center',
+      wordWrap: { width: W * 0.92 },
+    }).setOrigin(0.5, 1).setAlpha(0.8);
+
+    this.add.particles(0, 0, 'heart', {
+      x: { min: 0, max: W }, y: H + 30, lifespan: 7000, speedY: { min: -90 * s, max: -50 * s }, speedX: { min: -15, max: 15 },
+      scale: { start: 0.5 * s, end: 0.25 * s }, alpha: { start: 0.85, end: 0 }, rotate: { min: -20, max: 20 }, frequency: 450,
+    });
+
+    const go = () => this.begin();
+    this.input.once('pointerdown', go);
+    this.input.keyboard.once('keydown', go);
+    onResize(this, () => { if (!this.starting) this.scene.restart(); });
+    whiteFade(this, 1, 0, 600);
+  }
+  begin() {
+    if (this.starting) return;
+    this.starting = true;
+    audio.unlock(); audio.play('journey'); audio.sfx('chime');
+    this.tweens.add({ targets: this.kit, y: this.kit.y - 60, duration: 300, yoyo: true, ease: 'Quad.easeOut' });
+    whiteFade(this, 0, 1, 650, () => this.scene.start('Game'));
+  }
+  update(time, delta) {
+    const W = this.scale.width, H = this.scale.height;
+    STATE.zoom = Math.min(H / DESIGN_H, W / 620);
+    STATE.camX += delta * 0.05;
+    STATE.groundScreenY = H + 30 * STATE.zoom;
+  }
+}
+
+/* ---------- Game: the journey ---------- */
+class GameScene extends Phaser.Scene {
+  constructor() { super('Game'); }
+
+  create() {
+    this.L = CONFIG.worldLength;
+    this.state = 'play';          // play | card | ending
+    this.vx = 0; this.walkT = 0; this.facing = 1; this.zone = -1; this.lastStarAt = 0; this.combo = 0; this.trailAt = 0;
+    STATE.stars = 0; STATE.gifts = 0; STATE.progress = 0; STATE.moved = false;
+    STATE.input.left = STATE.input.right = false;
+    this.rng = new Phaser.Math.RandomDataGenerator(['rachel-oct24']);
+    this.cameras.main.setRoundPixels(false);
+
+    this.buildGifts();            // first, so other things can avoid them
+    this.buildGround();
+    this.buildDecor();
+    this.buildPlatforms();
+    this.buildStars();
+    this.buildSigns();
+    this.buildCastle();
+
+    // the hero
+    this.shadow = this.add.ellipse(START_X, GROUND_Y + 4, 54, 12, 0xc46a98, 0.2).setDepth(9);
+    this.player = this.add.image(START_X, GROUND_Y + 4, 'kit0').setOrigin(0.5, 1).setScale(0.5).setDepth(10);
+
+    // particle systems
+    this.trail = this.add.particles(0, 0, 'sparkle', {
+      emitting: false, lifespan: 700, speedY: { min: -40, max: -10 }, speedX: { min: -20, max: 20 },
+      scale: { start: 0.35, end: 0 }, alpha: { start: 1, end: 0 }, tint: SPARKLE_TINTS, blendMode: 'ADD',
+    }).setDepth(11);
+    this.burst = this.add.particles(0, 0, 'sparkle', {
+      emitting: false, lifespan: 900, speed: { min: 80, max: 260 }, scale: { start: 0.6, end: 0 },
+      alpha: { start: 1, end: 0 }, tint: SPARKLE_TINTS, blendMode: 'ADD', gravityY: 120,
+    }).setDepth(20);
+    this.hearts = this.add.particles(0, 0, 'heart', {
+      emitting: false, lifespan: 1100, speed: { min: 60, max: 180 }, angle: { min: 200, max: 340 },
+      scale: { start: 0.45, end: 0.1 }, alpha: { start: 1, end: 0 }, gravityY: 60, rotate: { min: -30, max: 30 },
+    }).setDepth(20);
+
+    // keyboard
+    this.keys = this.input.keyboard.addKeys({ left: 'LEFT', right: 'RIGHT', a: 'A', d: 'D' });
+
+    // camera
+    this.layoutCamera();
+    onResize(this, () => this.layoutCamera());
+    this.camX = this.player.x + (this.scale.width / this.zoom) * 0.15;
+
+    const onClosed = () => this.onCardClosed();
+    this.game.events.on('card:closed', onClosed);
+    this.events.once('shutdown', () => this.game.events.off('card:closed', onClosed));
+
+    this.scene.launch('UI');
+    this.scene.bringToTop('UI');
+    audio.setMusicVolume(0.55);
+  }
+
+  layoutCamera() {
+    const W = this.scale.width, H = this.scale.height;
+    this.zoom = Math.min(H / DESIGN_H, W / 620);
+    this.cameras.main.setZoom(this.zoom);
+    // in portrait we lift the ground so the touch buttons have room underneath
+    this.groundFrac = H > W * 1.05 ? 0.66 : 0.86;
+  }
+
+  /* ---------- world building ---------- */
+  nearGift(x, d) { return this.gifts.some(g => Math.abs(g.x - x) < d); }
+
+  buildGround() {
+    const chunk = 1024;
+    for (let x = -1400; x < this.L + 2400; x += chunk) {
+      const z = ZONES[zoneAt(Math.max(START_X, x + chunk / 2))];
+      this.add.tileSprite(x, GROUND_Y - 12, chunk + 2, 120, z.ground).setOrigin(0, 0).setTileScale(0.5).setDepth(6);
+      this.add.rectangle(x, GROUND_Y - 12 + 119, chunk + 2, 2400, z.fill).setOrigin(0, 0).setDepth(6);
+    }
+  }
+
+  buildDecor() {
+    const BY_ZONE = [
+      ['cottonTree', 'lolliPink', 'gumdrop', 'cupcake', 'cookie', 'cottonTree'],
+      ['mallowStack', 'gumdrop', 'lolliBlue', 'cottonTree', 'mallowStack'],
+      ['lolliPink', 'lolliBlue', 'candyCane', 'lolliPink', 'lolliBlue'],
+      ['iceCream', 'cottonTree', 'candyCane', 'gumdrop'],
+      ['cupcake', 'candyCane', 'cookie', 'lolliPink', 'iceCream', 'cupcake'],
+    ];
+    const tintable = { gumdrop: 1, cottonTree: 1 };
+    const sways = { lolliPink: 1, lolliBlue: 1, cottonTree: 1, candyCane: 1 };
+    const r = this.rng;
+    // back row (smaller, slightly faded = depth)
+    for (let x = 300; x < this.L - 300; x += r.between(260, 480)) {
+      const key = r.pick(BY_ZONE[zoneAt(x)]);
+      const img = this.add.image(x, GROUND_Y - 4, key).setOrigin(0.5, 1).setScale(0.32 * r.realInRange(0.85, 1.1)).setDepth(2).setAlpha(0.82);
+      if (tintable[key]) img.setTint(r.pick(PASTELS));
+    }
+    // main row
+    let x = 560;
+    while (x < this.L - 700) {
+      const z = zoneAt(x), key = r.pick(BY_ZONE[z]);
+      const img = this.add.image(x, GROUND_Y + 8, key).setOrigin(0.5, 1).setDepth(3).setScale(0.5 * r.realInRange(0.78, 1.15));
+      if (r.frac() < 0.5) img.setFlipX(true);
+      if (tintable[key]) img.setTint(r.pick(PASTELS));
+      if (sways[key]) this.tweens.add({ targets: img, angle: { from: -1.8, to: 1.8 }, duration: r.between(1800, 2800), yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: r.between(0, 1500) });
+      x += z === 2 ? r.between(150, 260) : r.between(230, 430);
+    }
+    // a few little gumdrops in front of the path
+    for (let fx = 900; fx < this.L - 600; fx += r.between(900, 1500)) {
+      if (this.nearGift(fx, 160)) continue;
+      this.add.image(fx, GROUND_Y + 46, 'gumdrop').setOrigin(0.5, 1).setScale(0.3).setDepth(15).setTint(r.pick(PASTELS));
+    }
+  }
+
+  buildPlatforms() {
+    const r = this.rng;
+    for (let x = 900; x < this.L - 900; x += r.between(1100, 1700)) {
+      const y = GROUND_Y - r.between(200, 270);
+      const plat = this.add.image(x, y, 'mallowPlat').setScale(0.5).setDepth(4);
+      const topper = r.frac() < 0.5
+        ? this.add.image(x, y - 14, 'heart').setScale(0.4).setOrigin(0.5, 1).setDepth(4)
+        : this.add.image(x + 20, y - 8, 'cupcake').setScale(0.22).setOrigin(0.5, 1).setDepth(4);
+      const tw = this.add.image(x - 40, y - 24, 'sparkle').setScale(0.5).setDepth(4).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: [plat, topper, tw], y: '-=10', duration: r.between(1600, 2400), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: tw, alpha: { from: 0.2, to: 1 }, scale: { from: 0.3, to: 0.6 }, duration: 700, yoyo: true, repeat: -1 });
+    }
+  }
+
+  buildStars() {
+    this.stars = [];
+    const r = this.rng;
+    let x = 700;
+    while (x < this.L - 900) {
+      if (!this.nearGift(x, 220)) {
+        const n = r.between(3, 5);
+        for (let i = 0; i < n; i++) {
+          const sx = x + i * 58, sy = GROUND_Y - 34 - Math.sin(i / (n - 1) * Math.PI) * 44;
+          const img = this.add.image(sx, sy, 'star').setScale(0.42).setDepth(8);
+          this.stars.push({ img, baseY: sy, alive: true, phase: r.frac() * 6 });
+        }
+      }
+      x += r.between(650, 1050);
+    }
+    STATE.totalStars = this.stars.length;
+  }
+
+  buildGifts() {
+    const msgs = CONFIG.messages, N = msgs.length;
+    const first = 1300, last = this.L - 2400;
+    this.gifts = msgs.map((m, i) => {
+      const gx = N === 1 ? first : first + (last - first) * i / (N - 1);
+      const verse = m.type === 'verse';
+      const glow = this.add.image(gx, GROUND_Y - 70, 'glow').setScale(0.55).setAlpha(0.6)
+        .setTint(verse ? 0xfff0a0 : 0xffc2e2).setBlendMode(Phaser.BlendModes.ADD).setDepth(8);
+      const img = this.add.image(gx, GROUND_Y - 70, verse ? 'giftLilac' : 'giftPink').setScale(0.5).setDepth(9);
+      const tag = this.add.text(gx, GROUND_Y - 124, verse ? '📖' : '💌', { fontSize: '22px' }).setOrigin(0.5).setResolution(3).setDepth(9);
+      const em = this.add.particles(0, 0, 'sparkle', {
+        emitZone: { type: 'random', source: new Phaser.Geom.Circle(gx, GROUND_Y - 70, 46) },
+        lifespan: 900, speedY: { min: -30, max: -10 }, scale: { start: 0.4, end: 0 }, alpha: { start: 1, end: 0 },
+        frequency: 220, tint: SPARKLE_TINTS, blendMode: 'ADD',
+      }).setDepth(9);
+      return { x: gx, img, glow, tag, em, msg: m, idx: i, opened: false };
+    });
+  }
+
+  worldText(x, y, str, size, color, depth = 5, extra = {}) {
+    return this.add.text(x, y, str, Object.assign({
+      fontFamily: FONT, fontSize: size + 'px', color, align: 'center', fontStyle: '700',
+    }, extra)).setOrigin(0.5).setResolution(3).setDepth(depth);
+  }
+
+  buildSigns() {
+    const place = (x, str) => {
+      while (this.nearGift(x, 200)) x += 120;
+      this.add.image(x, GROUND_Y + 8, 'sign').setOrigin(0.5, 1).setScale(0.5).setDepth(4);
+      const t = this.worldText(x, GROUND_Y - 68, str, 12, '#d0488a', 5, { wordWrap: { width: 100, useAdvancedWrap: true } });
+      for (let fs = 12; t.height > 38 && fs > 8; fs--) t.setFontSize(fs);
+    };
+    place(520, CONFIG.friendName + "'s Sweet Journey ➜");
+    for (let k = 1; k < 5; k++) place(zoneStartX(k) + 60, ZONES[k].name.replace(/^\S+\s/, '') + ' ➜');
+    place(this.L - 1300, 'Almost there! 🏰');
+  }
+
+  buildCastle() {
+    const cx = this.L + 150;
+    this.castleX = cx;
+    this.add.image(cx, GROUND_Y + 10, 'glow').setScale(2.6).setAlpha(0.5).setTint(0xfff0c0).setBlendMode(Phaser.BlendModes.ADD).setDepth(2);
+    this.add.image(cx, GROUND_Y + 10, 'castle').setOrigin(0.5, 1).setScale(0.5).setDepth(3);
+    const banner = this.worldText(cx, GROUND_Y - 400, '🎂 ' + CONFIG.friendName + "'s Party 🎂", 26, '#ff4f9a', 5,
+      { stroke: '#ffffff', strokeThickness: 7 });
+    this.tweens.add({ targets: banner, y: banner.y - 8, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    [[-210, 0xffb3d9], [-180, 0xb3e0ff], [-235, 0xfff0a6], [210, 0xd9c2ff], [180, 0xbff2d9], [240, 0xffc9a8]].forEach(([dx, tint], i) => {
+      const b = this.add.image(cx + dx, GROUND_Y - 150 - (i % 3) * 30, 'balloon').setScale(0.5).setTint(tint).setDepth(4);
+      this.tweens.add({ targets: b, y: b.y - 14, angle: { from: -4, to: 4 }, duration: 1400 + i * 120, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    });
+    this.add.particles(0, 0, 'sparkle', {
+      emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(cx - 200, GROUND_Y - 380, 400, 360) },
+      lifespan: 1400, scale: { start: 0.5, end: 0 }, alpha: { start: 1, end: 0 }, frequency: 120, tint: SPARKLE_TINTS, blendMode: 'ADD',
+    }).setDepth(5);
+  }
+
+  /* ---------- gameplay ---------- */
+  openGift(g) {
+    g.opened = true;
+    this.state = 'card';
+    this.vx = 0;
+    STATE.gifts++;
+    audio.sfx('chime');
+    audio.setMusicVolume(0.3);
+    this.burst.explode(36, g.x, GROUND_Y - 70);
+    this.hearts.explode(8, g.x, GROUND_Y - 80);
+    g.em.stop();
+    this.tweens.add({ targets: [g.img, g.tag], y: '-=40', scale: '*=1.5', alpha: 0, duration: 380, ease: 'Back.easeIn' });
+    this.tweens.add({ targets: g.glow, alpha: 0, scale: 1.2, duration: 500 });
+    this.time.delayedCall(420, () => this.game.events.emit('card:open', g.msg, g.idx, this.gifts.length));
+  }
+
+  onCardClosed() {
+    if (this.state !== 'card') return;
+    this.state = 'play';
+    audio.setMusicVolume(0.55);
+    this.hearts.explode(5, this.player.x, this.player.y - 70);
+  }
+
+  startEnding() {
+    this.state = 'ending';
+    audio.sfx('fanfare');
+    this.game.events.emit('ending');
+    const door = this.castleX;
+    this.tweens.add({
+      targets: this.player, x: door, duration: Math.max(200, Math.abs(door - this.player.x) / CONFIG.walkSpeed * 1000),
+      onComplete: () => {
+        this.burst.explode(50, door, GROUND_Y - 40);
+        this.tweens.add({ targets: [this.player, this.shadow], scale: 0.15, alpha: 0, y: '-=10', duration: 700, ease: 'Back.easeIn' });
+        this.time.delayedCall(500, () => {
+          const ui = this.scene.get('UI');
+          const done = () => { this.scene.stop('UI'); this.scene.sleep('Background'); this.scene.start('Birthday'); };
+          if (ui && ui.sys.isActive()) whiteFade(ui, 0, 1, 1100, done); else done();
+        });
+      },
+    });
+  }
+
+  update(time, delta) {
+    const dt = Math.min(delta, 50) / 1000;
+    const p = this.player;
+
+    // ---- input ----
+    let dir = 0;
+    if (this.state === 'play') {
+      const L = STATE.input.left || this.keys.left.isDown || this.keys.a.isDown;
+      const R = STATE.input.right || this.keys.right.isDown || this.keys.d.isDown;
+      dir = (R ? 1 : 0) - (L ? 1 : 0);
+    }
+    const target = dir * CONFIG.walkSpeed;
+    this.vx += (target - this.vx) * Math.min(1, dt * (dir ? 8 : 10));
+    if (this.state !== 'ending') p.x = clamp(p.x + this.vx * dt, 80, this.castleX);
+    if (dir) this.facing = dir;
+
+    // ---- animation ----
+    const moving = Math.abs(this.vx) > 15 || this.state === 'ending';
+    let bob = 0;
+    if (moving) {
+      this.walkT += dt * (this.state === 'ending' ? 1 : Math.abs(this.vx) / CONFIG.walkSpeed);
+      p.setTexture(Math.floor(this.walkT * 7) % 2 ? 'kit1' : 'kit0');
+      bob = Math.abs(Math.sin(this.walkT * Math.PI * 3.5)) * 5;
+      if (time > this.trailAt) { this.trail.emitParticleAt(p.x - this.facing * 18, GROUND_Y - 4, 1); this.trailAt = time + 70; }
+    } else if (this.state !== 'ending') {
+      p.setTexture('kit0');
+    }
+    if (this.state !== 'ending') {
+      p.y = GROUND_Y + 4 - bob;
+      const breathe = moving ? 0 : Math.sin(time / 420) * 0.012;
+      p.setScale(0.5 * (1 - breathe * 0.5), 0.5 * (1 + breathe));
+      p.angle = (this.vx / CONFIG.walkSpeed) * 4;
+      this.shadow.setPosition(p.x, GROUND_Y + 4).setScale(1 - bob * 0.03);
+    }
+    p.setFlipX(this.facing < 0);
+
+    // ---- progress & zones ----
+    STATE.progress = progressAt(p.x);
+    if (p.x > START_X + 80) STATE.moved = true;
+    const z = zoneAt(p.x);
+    if (z !== this.zone) {
+      this.zone = z;
+      if (time > 500 || z === 0) this.time.delayedCall(z === 0 ? 900 : 0, () => this.game.events.emit('zone', z));
+    }
+
+    const W = this.scale.width, H = this.scale.height, visW = W / this.zoom, visH = H / this.zoom;
+
+    // ---- stars ----
+    for (const s of this.stars) {
+      if (!s.alive) continue;
+      const dx = s.img.x - p.x;
+      if (dx < -visW || dx > visW) continue;
+      s.img.y = s.baseY + Math.sin(time / 300 + s.phase) * 5;
+      s.img.angle = Math.sin(time / 500 + s.phase) * 12;
+      if (Math.abs(dx) < 30) {
+        s.alive = false;
+        STATE.stars++;
+        this.combo = time - this.lastStarAt < 900 ? this.combo + 1 : 0;
+        this.lastStarAt = time;
+        audio.sfx('blip', this.combo);
+        this.burst.explode(6, s.img.x, s.img.y);
+        this.tweens.add({ targets: s.img, y: s.img.y - 40, scale: 0.7, alpha: 0, duration: 300, onComplete: () => s.img.setVisible(false) });
+      }
+    }
+
+    // ---- gifts ----
+    for (const g of this.gifts) {
+      if (g.opened) continue;
+      const dx = g.x - p.x;
+      if (dx < -visW || dx > visW) continue;
+      const y = GROUND_Y - 70 + Math.sin(time / 380 + g.idx) * 6;
+      g.img.y = y; g.glow.y = y; g.tag.y = y - 54;
+      g.img.angle = Math.sin(time / 260 + g.idx) * 4;
+      g.glow.setAlpha(0.45 + Math.sin(time / 300) * 0.15);
+      if (this.state === 'play' && Math.abs(dx) < 44) this.openGift(g);
+    }
+
+    // ---- finish line ----
+    if (this.state === 'play' && p.x >= this.castleX - 70) this.startEnding();
+
+    // ---- camera ----
+    const look = this.state === 'ending' ? 0 : this.facing * visW * 0.15;
+    this.camX += (p.x + look - this.camX) * Math.min(1, dt * 3);
+    const cx = clamp(this.camX, visW / 2 - 300, this.castleX + 320 - visW / 2);
+    const cy = GROUND_Y - (this.groundFrac - 0.5) * visH;
+    this.cameras.main.centerOn(cx, cy);
+    STATE.camX = cx; STATE.zoom = this.zoom; STATE.groundScreenY = this.groundFrac * H;
+  }
+}
+
+/* ---------- UI overlay: touch buttons, HUD, message cards ---------- */
+class UIScene extends Phaser.Scene {
+  constructor() { super('UI'); }
+  create() {
+    this.cardOpen = false; this.card = null; this.dim = null; this.cardFx = null; this.cardArgs = null;
+    this.lastStars = -1; this.hintHiding = false; this.cardTime = 0; this.banner = null;
+    const isTouch = this.sys.game.device.input.touch;
+
+    this.btnL = this.add.image(0, 0, 'btnArrow').setDepth(50);
+    this.btnR = this.add.image(0, 0, 'btnArrow').setFlipX(true).setDepth(50);
+
+    this.hud = this.add.graphics().setDepth(40);
+    this.starText = this.add.text(0, 0, '', { fontFamily: FONT, color: '#c9820a', fontStyle: '700' }).setOrigin(0, 0.5).setDepth(41);
+    this.giftText = this.add.text(0, 0, '', { fontFamily: FONT, color: '#d0488a', fontStyle: '700' }).setOrigin(0, 0.5).setDepth(41);
+    this.kitIcon = this.add.image(0, 0, 'kit0').setOrigin(0.5, 0.85).setDepth(42);
+    this.castleIcon = this.add.text(0, 0, '🏰', {}).setOrigin(0.5).setDepth(41);
+    this.muteBtn = this.add.text(0, 0, audio.muted ? '🔇' : '🔊', {}).setOrigin(0.5).setDepth(42).setInteractive({ useHandCursor: true });
+    this.muteBtn.on('pointerdown', () => { audio.unlock(); audio.setMuted(!audio.muted); this.muteBtn.setText(audio.muted ? '🔇' : '🔊'); });
+
+    this.hint = this.add.text(0, 0, isTouch ? 'Hold ➜ to walk!' : 'Use ← → keys (or the arrows) to walk!',
+      { fontFamily: FONT, color: '#ff4f9a', fontStyle: '700', stroke: '#ffffff', align: 'center' }).setOrigin(0.5).setDepth(45);
+    this.hintTween = this.tweens.add({ targets: this.hint, y: '-=8', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    this.uiBurst = this.add.particles(0, 0, 'sparkle', {
+      emitting: false, lifespan: 1000, speed: { min: 120, max: 420 }, scale: { start: 0.9 * DPR, end: 0 },
+      alpha: { start: 1, end: 0 }, tint: SPARKLE_TINTS, blendMode: 'ADD',
+    }).setDepth(120);
+
+    // events from the game
+    const onCard = (msg, idx, total) => this.openCard(msg, idx, total, true);
+    const onZone = (z) => this.showZone(z);
+    const onEnd = () => this.tweens.add({ targets: [this.btnL, this.btnR, this.hint], alpha: 0, duration: 400 });
+    this.game.events.on('card:open', onCard);
+    this.game.events.on('zone', onZone);
+    this.game.events.on('ending', onEnd);
+    this.events.once('shutdown', () => {
+      this.game.events.off('card:open', onCard); this.game.events.off('zone', onZone); this.game.events.off('ending', onEnd);
+    });
+
+    // closing cards: tap anywhere, or Space / Enter
+    this.input.on('pointerdown', (ptr, over) => { if (this.cardOpen && !over.includes(this.muteBtn)) this.closeCard(); });
+    this.input.keyboard.on('keydown-SPACE', () => this.closeCard());
+    this.input.keyboard.on('keydown-ENTER', () => this.closeCard());
+
+    this.layout();
+    onResize(this, () => this.layout());
+    whiteFade(this, 1, 0, 800);
+  }
+
+  layout() {
+    const W = this.scale.width, H = this.scale.height, u = this.u = calcU(W, H), sf = STATE.safe;
+    const m = 14 * u;
+    // touch buttons
+    const br = this.btnRad = 46 * u;
+    this.btnL.setScale(br * 2 / 240).setPosition(m + sf.l + br, H - m - sf.b - br);
+    this.btnR.setScale(br * 2 / 240).setPosition(W - m - sf.r - br, H - m - sf.b - br);
+    this.btnScale = br * 2 / 240;
+    // top HUD
+    const top = m + sf.t, ph = 34 * u;
+    const portrait = H > W * 1.05;
+    this.pill = { h: ph, starX: m + sf.l, giftX: m + sf.l + 96 * u, y: top };
+    this.starText.setFontSize(Math.round(18 * u)).setPosition(this.pill.starX + 12 * u, top + ph / 2);
+    this.giftText.setFontSize(Math.round(18 * u)).setPosition(this.pill.giftX + 12 * u, top + ph / 2);
+    this.muteBtn.setFontSize(Math.round(22 * u)).setPosition(W - m - sf.r - ph / 2, top + ph / 2);
+    if (portrait) this.track = { x: m + sf.l, y: top + ph + 22 * u, w: W - 2 * m - sf.l - sf.r - 34 * u };
+    else {
+      const x0 = this.pill.giftX + 104 * u, x1 = W - m - sf.r - ph - 40 * u;
+      this.track = { x: x0, y: top + ph / 2, w: Math.max(80 * u, Math.min(460 * u, x1 - x0)) };
+      this.track.x = x0 + Math.max(0, (x1 - x0 - this.track.w) / 2);
+    }
+    this.track.h = 12 * u;
+    this.castleIcon.setFontSize(Math.round(22 * u)).setPosition(this.track.x + this.track.w + 16 * u, this.track.y);
+    this.kitIcon.setScale((34 * u) / 204);
+    // hint
+    this.hint.setFontSize(Math.round(17 * u)).setStroke('#ffffff', 5 * u);
+    if (this.sys.game.device.input.touch) this.hint.setPosition(this.btnR.x - br * 0.4, this.btnR.y - br - 26 * u);
+    else this.hint.setPosition(W / 2, H - m - sf.b - 40 * u);
+    this.hint.setOrigin(this.sys.game.device.input.touch ? 0.75 : 0.5, 0.5);
+    this.lastStars = -1;
+    if (this.cardOpen && this.cardArgs) this.openCard(...this.cardArgs, false);
+  }
+
+  drawHud() {
+    const u = this.u, g = this.hud, P = this.pill, T = this.track;
+    g.clear();
+    // pills
+    g.fillStyle(0xffffff, 0.85);
+    g.fillRoundedRect(P.starX, P.y, 86 * u, P.h, P.h / 2);
+    g.fillRoundedRect(P.giftX, P.y, 96 * u, P.h, P.h / 2);
+    g.lineStyle(3 * u, 0xffc2e0, 1);
+    g.strokeRoundedRect(P.starX, P.y, 86 * u, P.h, P.h / 2);
+    g.strokeRoundedRect(P.giftX, P.y, 96 * u, P.h, P.h / 2);
+    g.fillStyle(0xffffff, 0.85); g.fillCircle(this.muteBtn.x, this.muteBtn.y, P.h / 2); g.strokeCircle(this.muteBtn.x, this.muteBtn.y, P.h / 2);
+    // progress track
+    g.fillStyle(0xffffff, 0.85); g.fillRoundedRect(T.x, T.y - T.h / 2, T.w, T.h, T.h / 2);
+    const fw = Math.max(T.h, T.w * STATE.progress);
+    g.fillStyle(0xff8cc6, 1); g.fillRoundedRect(T.x, T.y - T.h / 2, fw, T.h, T.h / 2);
+    g.fillStyle(0xffffff, 0.5); g.fillRoundedRect(T.x + 3 * u, T.y - T.h / 2 + 2 * u, Math.max(0, fw - 6 * u), T.h * 0.3, T.h * 0.15);
+    g.lineStyle(2 * u, 0xffb3d6, 1); g.strokeRoundedRect(T.x, T.y - T.h / 2, T.w, T.h, T.h / 2);
+    // gift markers along the track
+    CONFIG.messages.forEach((msg, i) => {
+      const N = CONFIG.messages.length, gx = 1300 + ((CONFIG.worldLength - 2400) - 1300) * (N === 1 ? 0 : i / (N - 1));
+      const px = T.x + T.w * progressAt(gx);
+      g.fillStyle(i < STATE.gifts ? 0xffffff : (msg.type === 'verse' ? 0xc7a8ff : 0xff6fae), 1);
+      g.fillCircle(px, T.y, 3 * u);
+    });
+  }
+
+  update(time) {
+    // ---- touch / mouse buttons: check every active pointer (multi-touch, slide between buttons) ----
+    let L = false, R = false;
+    if (!this.cardOpen) {
+      const r = this.btnRad * 1.3;
+      for (const p of this.input.manager.pointers) {
+        if (!p || !p.isDown) continue;
+        if (Phaser.Math.Distance.Between(p.x, p.y, this.btnL.x, this.btnL.y) < r) L = true;
+        if (Phaser.Math.Distance.Between(p.x, p.y, this.btnR.x, this.btnR.y) < r) R = true;
+      }
+    }
+    STATE.input.left = L; STATE.input.right = R;
+    this.btnL.setScale(this.btnScale * (L ? 0.9 : 1)).setAlpha(L ? 1 : 0.88);
+    this.btnR.setScale(this.btnScale * (R ? 0.9 : 1)).setAlpha(R ? 1 : 0.88);
+
+    if (STATE.moved && this.hint.visible && !this.hintHiding) {
+      this.hintHiding = true;
+      this.tweens.add({ targets: this.hint, alpha: 0, duration: 500, onComplete: () => this.hint.setVisible(false) });
+    }
+
+    // ---- HUD ----
+    this.drawHud();
+    if (STATE.stars !== this.lastStars) {
+      if (this.lastStars >= 0) this.tweens.add({ targets: this.starText, scale: { from: 1.3, to: 1 }, duration: 200 });
+      this.lastStars = STATE.stars;
+      this.starText.setText('⭐ ' + STATE.stars);
+    }
+    this.giftText.setText('🎁 ' + STATE.gifts + '/' + CONFIG.messages.length);
+    const T = this.track;
+    this.kitIcon.setPosition(T.x + T.w * STATE.progress, T.y + 6 * this.u).setTexture(Math.floor(time / 180) % 2 && Math.abs(STATE.input.left - STATE.input.right) ? 'kit1' : 'kit0');
+  }
+
+  showZone(z) {
+    const W = this.scale.width, H = this.scale.height, u = this.u;
+    if (z > 0) audio.sfx('zone');
+    if (this.banner) { this.tweens.killTweensOf(this.banner); this.banner.destroy(); }
+    const fs = Math.round(32 * u);
+    const t = this.add.text(0, 0, ZONES[z].name, {
+      fontFamily: FONT, fontSize: fs + 'px', color: '#ff4f9a', fontStyle: '700',
+      stroke: '#ffffff', strokeThickness: Math.round(8 * u), align: 'center',
+    }).setOrigin(0.5, 0).setShadow(0, 4 * u, 'rgba(200,80,140,.35)', 8 * u, true, true);
+    const maxW = W * 0.88;                                   // shrink to fit on one line instead of wrapping
+    if (t.width > maxW) t.setFontSize(Math.floor(fs * maxW / t.width));
+    const sub = this.add.text(0, t.height + 2 * u, 'Area ' + (z + 1) + ' of 5', {
+      fontFamily: FONT, fontSize: Math.round(16 * u) + 'px', color: '#b06ad8', fontStyle: '600', stroke: '#ffffff', strokeThickness: Math.round(5 * u),
+    }).setOrigin(0.5, 0);
+    // sit below the HUD, above the play area
+    const y0 = Math.max(H * 0.2, this.track.y + 34 * u);
+    const b = this.banner = this.add.container(W / 2, y0 + 12 * u, [t, sub]).setDepth(60).setAlpha(0);
+    this.uiBurst.explode(24, W / 2, y0 + t.height / 2);
+    this.tweens.add({ targets: b, alpha: 1, y: y0, duration: 500, ease: 'Sine.easeOut' });
+    this.tweens.add({ targets: b, alpha: 0, duration: 700, delay: 2300, onComplete: () => { b.destroy(); if (this.banner === b) this.banner = null; } });
+  }
+
+  openCard(msg, idx, total, animate) {
+    const W = this.scale.width, H = this.scale.height, u = this.u;
+    if (this.card) { this.card.c.destroy(); this.card = null; }
+    if (this.dim) { this.dim.destroy(); this.dim = null; }
+    if (this.cardFx) { this.cardFx.destroy(); this.cardFx = null; }
+    this.cardArgs = [msg, idx, total];
+    this.cardOpen = true;
+    if (animate) this.cardTime = this.time.now;
+    const verse = msg.type === 'verse';
+    this.dim = this.add.rectangle(0, 0, W, H, 0x6b2d5c, animate ? 0 : 0.35).setOrigin(0).setDepth(99);
+    const card = this.card = makeCard(this, {
+      W, H, u,
+      icon: verse ? '📖' : '💌',
+      title: msg.title || (verse ? 'A verse for you' : 'A little note for you'),
+      titleColor: verse ? '#9a62d6' : '#ff4f9a',
+      body: verse ? '“' + msg.body + '”' : msg.body,
+      ref: verse ? '— ' + msg.ref + (CONFIG.verseTranslation ? ' (' + CONFIG.verseTranslation + ')' : '') : null,
+      footer: 'Tap to continue ✨',
+      accent: verse ? 0xffc94d : 0xff9cc9, accentCss: verse ? '#f0b429' : '#ff9cc9',
+      counter: (idx + 1) + ' / ' + total,
+    });
+    card.c.setPosition(W / 2, H / 2).setDepth(100);
+    this.tweens.add({ targets: card.footer, alpha: { from: 1, to: 0.35 }, duration: 700, yoyo: true, repeat: -1 });
+    if (card.icon) this.tweens.add({ targets: card.icon, angle: { from: -8, to: 8 }, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    card.corners.forEach((c, i) => this.tweens.add({ targets: c, scale: { from: 0.8, to: 1.2 }, duration: 500 + i * 90, yoyo: true, repeat: -1 }));
+    // sparkles running around the card's edge
+    this.cardFx = this.add.particles(0, 0, 'sparkle', {
+      emitZone: { type: 'edge', source: new Phaser.Geom.Rectangle(W / 2 - card.cw / 2, H / 2 - card.ch / 2, card.cw, card.ch), quantity: 60 },
+      lifespan: 900, scale: { start: 0.55 * DPR, end: 0 }, alpha: { start: 1, end: 0 }, speed: { min: 10, max: 40 },
+      frequency: 70, tint: verse ? [0xfff3a8, 0xffffff, 0xffd36e] : [0xffc2e2, 0xffffff, 0xc9ecff], blendMode: 'ADD',
+    }).setDepth(101);
+    if (animate) {
+      this.tweens.add({ targets: this.dim, fillAlpha: 0.35, duration: 300 });
+      card.c.setScale(0.5).setAlpha(0);
+      this.tweens.add({ targets: card.c, scale: 1, alpha: 1, duration: 450, ease: 'Back.easeOut' });
+      this.uiBurst.explode(40, W / 2, H / 2);
+    }
+  }
+
+  closeCard() {
+    if (!this.cardOpen || this.time.now - this.cardTime < 650) return;
+    this.cardOpen = false; this.cardArgs = null;
+    audio.sfx('pop');
+    const card = this.card, dim = this.dim, fx = this.cardFx;
+    this.card = this.dim = this.cardFx = null;
+    fx.stop();
+    this.tweens.add({ targets: card.c, scale: 0.85, alpha: 0, duration: 220, onComplete: () => card.c.destroy() });
+    this.tweens.add({ targets: dim, fillAlpha: 0, duration: 250, onComplete: () => dim.destroy() });
+    this.time.delayedCall(1000, () => fx.destroy());
+    this.game.events.emit('card:closed');
+  }
+}
+
+/* ---------- Finale: the birthday screen ---------- */
+class BirthdayScene extends Phaser.Scene {
+  constructor() { super('Birthday'); }
+  create(data) {
+    this.wished = !!(data && data.wished);
+    this.cardOpen = false;
+    const W = this.scale.width, H = this.scale.height, u = calcU(W, H), portrait = H > W;
+    const s = this.s = portrait ? Math.min(W / 560, H / 1000) : Math.min(W / 1000, H / 720);
+    const VH = portrait ? 1000 : 720, oy = (H - VH * s) / 2, cx = W / 2;
+    const Y = v => oy + v * s;
+    this.u = u;
+    const P = (land, port) => portrait ? port : land;
+
+    if (!(data && data.restarted)) { audio.play('party'); audio.setMusicVolume(0.6); }
+
+    // background gradient + slowly turning rays
+    const bg = this.add.graphics();
+    bg.fillGradientStyle(0xffb8dc, 0xffb8dc, 0xffe6c4, 0xffe6c4, 1); bg.fillRect(0, 0, W, H);
+    this.rays = this.add.graphics({ x: cx, y: Y(P(420, 520)) });
+    const R = Math.hypot(W, H);
+    for (let i = 0; i < 16; i++) {
+      const a0 = i / 16 * Math.PI * 2, a1 = a0 + Math.PI / 16;
+      this.rays.fillStyle(0xffffff, 0.13);
+      this.rays.fillTriangle(0, 0, Math.cos(a0) * R, Math.sin(a0) * R, Math.cos(a1) * R, Math.sin(a1) * R);
+    }
+
+    // balloons drifting up
+    for (let i = 0; i < 10; i++) {
+      const b = this.add.image(Phaser.Math.Between(0, W), H + Phaser.Math.Between(50, H), 'balloon').setTint(PASTELS[i % PASTELS.length]).setScale(0.7 * s).setAlpha(0.9);
+      const dur = Phaser.Math.Between(9000, 15000);
+      this.tweens.add({ targets: b, y: -200 * s, duration: dur, repeat: -1, onRepeat: () => { b.x = Phaser.Math.Between(0, W); } });
+      this.tweens.add({ targets: b, angle: { from: -6, to: 6 }, duration: 1600 + i * 100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
+
+    // confetti
+    this.add.particles(0, 0, 'confetti', {
+      x: { min: 0, max: W }, y: -20, lifespan: 7000, speedY: { min: 60 * s, max: 160 * s }, speedX: { min: -40, max: 40 },
+      gravityY: 30 * s, rotate: { start: 0, end: 540 }, scale: { min: 0.8 * s, max: 1.6 * s },
+      tint: [0xff6fa8, 0x7cc8ff, 0xffd84d, 0x8fe0b0, 0xb48cff, 0xffffff, 0xff9a5c], frequency: 55,
+    }).setDepth(30);
+
+    // "Happy Birthday" — each letter bounces in a wave
+    const title = 'Happy Birthday';
+    const colors = ['#ff5fa2', '#ff8a5c', '#f7b500', '#4fc38a', '#3fa9f5', '#9b6bff'];
+    const fs = Math.round(P(64, 52) * s);
+    this.letters = [];
+    let total = 0;
+    const chars = [...title].map((ch, i) => {
+      const t = this.add.text(0, 0, ch, {
+        fontFamily: FONT, fontSize: fs + 'px', color: colors[i % colors.length], fontStyle: '700',
+        stroke: '#ffffff', strokeThickness: Math.round(fs * 0.16),
+      }).setOrigin(0, 0.5).setShadow(0, 4 * s, 'rgba(200,80,140,.35)', 6 * s, true, true).setDepth(40);
+      const w = ch === ' ' ? fs * 0.3 : t.width - fs * 0.12;
+      total += w;
+      return { t, w };
+    });
+    let lx = cx - total / 2;
+    const ty = Y(P(72, 115));
+    chars.forEach(({ t, w }, i) => { t.setPosition(lx, ty); lx += w; this.letters.push({ t, base: ty, i }); });
+
+    const name = this.add.text(cx, Y(P(148, 190)), CONFIG.friendName + '!', {
+      fontFamily: FONT, fontSize: Math.round(P(78, 66) * s) + 'px', color: '#ff4f9a', fontStyle: '700',
+      stroke: '#ffffff', strokeThickness: Math.round(12 * s),
+    }).setOrigin(0.5).setShadow(0, 5 * s, 'rgba(200,60,130,.4)', 10 * s, true, true).setDepth(40);
+    this.tweens.add({ targets: name, scale: { from: 0.96, to: 1.06 }, duration: 476, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.add.text(cx, Y(P(212, 255)), '🎂  ' + CONFIG.birthdayDate + '  🎂', {
+      fontFamily: FONT, fontSize: Math.round(28 * s) + 'px', color: '#b06ad8', fontStyle: '700', stroke: '#ffffff', strokeThickness: Math.round(6 * s),
+    }).setOrigin(0.5).setDepth(40);
+
+    // cake + candles
+    const cakeBottom = Y(P(560, 650)), cakeH = 300 * s, cs = cakeH / 360;
+    this.add.image(cx, cakeBottom + 10 * s, 'glow').setScale(cakeH / 110).setAlpha(0.5).setTint(0xfff4c0).setBlendMode(Phaser.BlendModes.ADD);
+    this.cake = this.add.image(cx, cakeBottom, 'cake').setOrigin(0.5, 1).setScale(cs).setDepth(10);
+    this.tweens.add({ targets: this.cake, scaleY: cs * 1.02, scaleX: cs * 0.99, duration: 476, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const cakeTop = cakeBottom - 360 * cs, tierTop = cakeTop + 62 * cs;
+    this.flames = [];
+    for (let i = 0; i < 5; i++) {
+      const x = cx + (i - 2) * 30 * cs;
+      this.add.image(x, tierTop + 6 * cs, 'candle').setOrigin(0.5, 1).setScale(cs * 0.9).setDepth(9);
+      const fy = tierTop + 6 * cs - 84 * cs * 0.9;
+      const glow = this.add.image(x, fy - 10 * cs, 'dot').setScale(cs * 1.4).setTint(0xffd36e).setBlendMode(Phaser.BlendModes.ADD).setDepth(11);
+      const fl = this.add.image(x, fy, 'flame').setOrigin(0.5, 1).setScale(cs * 0.75).setDepth(12);
+      this.tweens.add({ targets: fl, scaleX: cs * 0.6, scaleY: cs * 0.85, angle: { from: -6, to: 6 }, duration: Phaser.Math.Between(140, 220), yoyo: true, repeat: -1 });
+      this.flames.push({ fl, glow, x, y: fy });
+      if (this.wished) { fl.setVisible(false); glow.setVisible(false); }
+    }
+
+    // the hero dances next to the cake, gifts on the other side
+    const side = P(290, 200) * s;
+    this.kit = this.add.image(cx - side, cakeBottom + 4 * s, 'kitJoy').setOrigin(0.5, 1).setScale(P(0.85, 0.7) * s).setDepth(12);
+    this.tweens.add({ targets: this.kit, y: this.kit.y - 22 * s, duration: 238, yoyo: true, repeat: -1, ease: 'Quad.easeOut' });
+    this.time.addEvent({ delay: 476, loop: true, callback: () => { this.kit.setFlipX(!this.kit.flipX); this.kit.setTexture(this.kit.flipX ? 'kitJoy1' : 'kitJoy'); } });
+    const g1 = this.add.image(cx + side, cakeBottom, 'giftPink').setOrigin(0.5, 1).setScale(P(1, 0.85) * s).setDepth(12);
+    const g2 = this.add.image(cx + side + 40 * s, cakeBottom - 70 * s, 'giftLilac').setOrigin(0.5, 1).setScale(P(0.7, 0.6) * s).setDepth(11);
+    this.tweens.add({ targets: [g1, g2], angle: { from: -4, to: 4 }, duration: 476, yoyo: true, repeat: -1 });
+    // a little stack of cookies — for the best baker
+    [[-46, 0], [-20, -10], [-34, -26]].forEach(([dx, dy], i) =>
+      this.add.image(cx + side + dx * s, cakeBottom + dy * s, 'cookie').setOrigin(0.5, 1).setScale(0.42 * s).setAngle(i * 12 - 10).setDepth(13));
+
+    // prompt, verse, buttons
+    this.prompt = this.add.text(cx, Y(P(612, 712)), this.wished ? '' : '🕯️ Tap anywhere to blow out the candles & make a wish! ✨', {
+      fontFamily: FONT, fontSize: Math.round(24 * s) + 'px', color: '#ff4f9a', fontStyle: '700', align: 'center',
+      stroke: '#ffffff', strokeThickness: Math.round(6 * s), wordWrap: { width: W * 0.9 },
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({ targets: this.prompt, scale: 1.06, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.add.text(cx, Y(P(686, 850)), '“' + CONFIG.finaleVerse.body + '”\n— ' + CONFIG.finaleVerse.ref + (CONFIG.verseTranslation ? ' (' + CONFIG.verseTranslation + ')' : ''), {
+      fontFamily: FONT, fontSize: Math.round(P(18, 21) * s) + 'px', color: '#8a4f7a', fontStyle: '500', align: 'center',
+      wordWrap: { width: Math.min(W * 0.9, P(900, 520) * s), useAdvancedWrap: true }, lineSpacing: 4 * s,
+    }).setOrigin(0.5).setDepth(40);
+
+    this.buttons = this.add.container(cx, Y(P(612, 940))).setDepth(45).setVisible(this.wished);
+    const mkBtn = (x, label, cb) => {
+      const t = this.add.text(x, 0, label, { fontFamily: FONT, fontSize: Math.round(22 * s) + 'px', color: '#ffffff', fontStyle: '700' }).setOrigin(0.5);
+      const w = t.width + 40 * s, h = t.height + 18 * s;
+      const g = this.add.graphics();
+      g.fillStyle(0xd94d8c, 0.35); g.fillRoundedRect(x - w / 2, -h / 2 + 4 * s, w, h, h / 2);
+      g.fillStyle(0xff6fae, 1); g.fillRoundedRect(x - w / 2, -h / 2, w, h, h / 2);
+      g.lineStyle(3 * s, 0xffffff, 1); g.strokeRoundedRect(x - w / 2, -h / 2, w, h, h / 2);
+      const zone = this.add.zone(x, 0, w, h).setInteractive({ useHandCursor: true });
+      zone.on('pointerdown', () => cb());
+      this.buttons.add([g, t, zone]);
+    };
+    mkBtn(-130 * s, '💌 Wishes', () => this.showWishes());
+    mkBtn(130 * s, '↺ Play again', () => this.replay());
+
+    const mute = this.add.text(W - 14 * u - STATE.safe.r, 14 * u + STATE.safe.t, audio.muted ? '🔇' : '🔊', { fontSize: Math.round(24 * u) + 'px' })
+      .setOrigin(1, 0).setDepth(60).setInteractive({ useHandCursor: true });
+    mute.on('pointerdown', () => { audio.setMuted(!audio.muted); mute.setText(audio.muted ? '🔇' : '🔊'); });
+
+    this.fx = this.add.particles(0, 0, 'sparkle', {
+      emitting: false, lifespan: 1300, speed: { min: 100 * s, max: 380 * s }, scale: { start: 1.1 * s, end: 0 },
+      alpha: { start: 1, end: 0 }, gravityY: 140 * s, tint: [0xffffff, 0xffd84d, 0xff8fc4, 0x8fd6ff, 0xb48cff], blendMode: 'ADD',
+    }).setDepth(35);
+    this.smoke = this.add.particles(0, 0, 'dot', {
+      emitting: false, lifespan: 1400, speedY: { min: -70 * s, max: -30 * s }, speedX: { min: -12, max: 12 },
+      scale: { start: 0.3 * s, end: 1.1 * s }, alpha: { start: 0.5, end: 0 }, tint: 0xd8d0e0,
+    }).setDepth(13);
+
+    this.input.on('pointerdown', (ptr, over) => {
+      if (over.length && !this.cardOpen) return;   // a button was tapped
+      if (this.cardOpen) this.closeWishes();
+      else if (!this.wished) this.makeWish();
+    });
+    this.input.keyboard.on('keydown-SPACE', () => { if (this.cardOpen) this.closeWishes(); else if (!this.wished) this.makeWish(); });
+    this.input.keyboard.on('keydown-ENTER', () => { if (this.cardOpen) this.closeWishes(); else if (!this.wished) this.makeWish(); });
+
+    onResize(this, () => this.scene.restart({ wished: this.wished, restarted: true }));
+    if (!(data && data.restarted)) { whiteFade(this, 1, 0, 1200); this.fireworks(4, 600); }
+  }
+
+  fireworks(n, startDelay = 0) {
+    const W = this.scale.width, H = this.scale.height;
+    for (let i = 0; i < n; i++) {
+      this.time.delayedCall(startDelay + i * 380, () => {
+        const x = Phaser.Math.Between(W * 0.12, W * 0.88), y = Phaser.Math.Between(H * 0.1, H * 0.45);
+        this.fx.explode(40, x, y);
+        audio.sfx('firework');
+      });
+    }
+  }
+
+  makeWish() {
+    this.wished = true;
+    audio.sfx('whoosh');
+    this.flames.forEach(({ fl, glow, x, y }, i) => {
+      this.tweens.killTweensOf(fl);
+      this.tweens.add({ targets: [fl, glow], scale: 0, alpha: 0, duration: 260, delay: i * 60 });
+      this.time.delayedCall(i * 60 + 150, () => this.smoke.explode(5, x, y - 10 * this.s));
+    });
+    this.tweens.add({ targets: this.prompt, alpha: 0, duration: 300 });
+    this.time.delayedCall(600, () => {
+      audio.sfx('fanfare');
+      this.fireworks(7);
+      const t = this.add.text(this.scale.width / 2, this.scale.height * 0.5, '✨ Wish made! ✨', {
+        fontFamily: FONT, fontSize: Math.round(54 * this.s) + 'px', color: '#ff4f9a', fontStyle: '700',
+        stroke: '#ffffff', strokeThickness: Math.round(10 * this.s),
+      }).setOrigin(0.5).setDepth(50).setScale(0.3).setAlpha(0);
+      this.tweens.add({ targets: t, scale: 1, alpha: 1, duration: 500, ease: 'Back.easeOut', yoyo: true, hold: 900, onComplete: () => t.destroy() });
+    });
+    this.time.delayedCall(2700, () => this.showWishes());
+  }
+
+  showWishes() {
+    if (this.cardOpen) return;
+    const W = this.scale.width, H = this.scale.height, u = this.u;
+    this.cardOpen = true; this.cardTime = this.time.now;
+    audio.sfx('chime');
+    this.dim = this.add.rectangle(0, 0, W, H, 0x6b2d5c, 0).setOrigin(0).setDepth(80);
+    this.tweens.add({ targets: this.dim, fillAlpha: 0.35, duration: 300 });
+    this.card = makeCard(this, {
+      W, H, u, icon: '🎂', title: 'Happy Birthday, ' + CONFIG.friendName + '!',
+      body: CONFIG.finalWishes + (CONFIG.fromName ? '\n\nWith love, ' + CONFIG.fromName + ' 💕' : ''),
+      footer: 'Tap to close ✨', accent: 0xff9cc9,
+    });
+    this.card.c.setPosition(W / 2, H / 2).setDepth(90).setScale(0.5).setAlpha(0);
+    this.tweens.add({ targets: this.card.c, scale: 1, alpha: 1, duration: 500, ease: 'Back.easeOut' });
+    this.fx.explode(50, W / 2, H / 2);
+  }
+
+  closeWishes() {
+    if (!this.cardOpen || this.time.now - this.cardTime < 700) return;
+    this.cardOpen = false;
+    audio.sfx('pop');
+    const c = this.card.c, d = this.dim;
+    this.tweens.add({ targets: c, scale: 0.85, alpha: 0, duration: 220, onComplete: () => c.destroy() });
+    this.tweens.add({ targets: d, fillAlpha: 0, duration: 250, onComplete: () => d.destroy() });
+    this.buttons.setVisible(true).setAlpha(0);
+    this.tweens.add({ targets: this.buttons, alpha: 1, duration: 400 });
+  }
+
+  replay() {
+    audio.play('journey');
+    whiteFade(this, 0, 1, 600, () => {
+      this.scene.wake('Background');
+      this.scene.start('Game');
+    });
+  }
+
+  update(time) {
+    this.rays.rotation += 0.0015;
+    for (const l of this.letters) l.t.y = l.base + Math.sin(time / 260 + l.i * 0.45) * 7 * this.s;
+  }
+}
+
+/* =====================================================================
+   BOOT THE GAME
+   ===================================================================== */
+function startGame() {
+  if (typeof Phaser === 'undefined') {
+    const l = document.getElementById('loading');
+    if (l) l.innerHTML = '<div>😿</div><div style="text-align:center;padding:0 20px">Couldn\'t load the game engine.<br>Please check your internet connection and refresh.</div>';
+    return;
+  }
+  const game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: 'game',
+    backgroundColor: '#ffd6ec',
+    // We render at full device resolution and scale the canvas down with CSS zoom (crisp on phones)
+    scale: {
+      mode: Phaser.Scale.NONE,
+      width: Math.round(window.innerWidth * DPR),
+      height: Math.round(window.innerHeight * DPR),
+      zoom: 1 / DPR,
+    },
+    input: { activePointers: 4 },
+    render: { antialias: true, powerPreference: 'high-performance' },
+    scene: [BootScene, BackgroundScene, TitleScene, GameScene, UIScene, BirthdayScene],
+  });
+  window.game = game;
+  let t = null;
+  const fit = () => {
+    readSafeArea();
+    const w = Math.round(window.innerWidth * DPR), h = Math.round(window.innerHeight * DPR);
+    if (w !== game.scale.width || h !== game.scale.height) game.scale.resize(w, h);
+    game.scale.setZoom(1 / DPR);
+  };
+  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(fit, 60); });
+  window.addEventListener('orientationchange', () => setTimeout(fit, 300));
+}
+
+// wait (briefly) for the cute font so text renders with it from the start
+if (document.fonts && document.fonts.load) {
+  Promise.race([
+    Promise.all([document.fonts.load('700 20px Fredoka'), document.fonts.load('500 20px Fredoka'), document.fonts.load('600 20px Fredoka')]),
+    new Promise(r => setTimeout(r, 2500)),
+  ]).then(startGame, startGame);
+} else {
+  startGame();
+}
+</script>
+</body>
+</html>
